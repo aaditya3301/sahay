@@ -1,0 +1,19 @@
+{
+  "days": 14,
+  "scenarios": [
+    {"key": "ghee_leak", "intent": "damaged_item", "sku": "GF-GHE-1L", "courier": "Xpressbees", "count_this_week": 11, "count_last_week": 3,
+     "sentiment": [-0.8, -0.3], "resolution": "ai_auto", "describe": "ghee glass jar cracked and leaked in transit, box soaked"},
+    {"key": "honey_crystal", "intent": "product_question", "sku": "GF-HNY-500", "count_this_week": 7, "count_last_week": 6,
+     "sentiment": [-0.3, 0.2], "resolution": "ai_auto", "complaint": true, "describe": "honey has become solid/crystallised, customer thinks it is adulterated"},
+    {"key": "delay_lko", "intent": "delivery_delay", "courier": "India Post", "pincodes": ["226016", "226010"], "count_this_week": 6, "count_last_week": 2,
+     "sentiment": [-0.6, -0.2], "resolution": "ai_auto", "describe": "India Post parcel to Lucknow not delivered for over a week"},
+    {"key": "wismo", "intent": "order_status", "count_this_week": 12, "count_last_week": 11, "sentiment": [-0.1, 0.3], "resolution": "ai_auto",
+     "complaint": false, "describe": "asking when the order will be delivered"}
+  ],
+  "gaps": [
+    "Is your ghee lab tested? Can you share the FSSAI lab report?",
+    "Do you have a lab test report for the A2 ghee?",
+    "Do you deliver to Nepal or outside India?",
+    "Can I order ghee to Dubai?"
+  ]
+}
