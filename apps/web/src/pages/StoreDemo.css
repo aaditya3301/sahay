@@ -116,6 +116,13 @@
 .store-cart-empty { display: grid; justify-items: center; gap: 24px; text-align: center; padding: 36px 0 12px; }
 .store-toast { position: fixed; bottom: 24px; left: 24px; z-index: 30; display: flex; align-items: flex-start; gap: 12px; max-width: min(360px, calc(100vw - 110px)); border-radius: 16px; padding: 16px; background: var(--store-ink); color: var(--store-ground); font-size: 14px; }
 .store-toast button { flex-shrink: 0; padding: 0; }
+.store-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.store-pay-error { margin-top: 16px !important; font-size: 14px; color: #b42318; }
+.store-order-id { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; margin: 20px 0; padding: 16px; border-radius: 16px; background: color-mix(in srgb, var(--store-accent) 10%, transparent); }
+.store-order-id span { grid-column: 1 / -1; font-size: 13px; color: var(--store-muted); }
+.store-order-id strong { font-size: 26px; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+.store-order-id button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; padding: 6px 12px; font-size: 13px; }
+.store-placed .store-button { width: 100%; margin-top: 16px; }
 .store-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; min-height: 100svh; }
 @keyframes store-enter { from { opacity: .25; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes store-picture-in { from { opacity: .3; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }

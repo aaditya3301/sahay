@@ -324,6 +324,22 @@ async def email_events(request: Request):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# Cashfree payment events (storefront orders, see payments.py)
+# ---------------------------------------------------------------------------
+@router.post("/webhooks/cashfree")
+async def cashfree_webhook(request: Request):
+    from app import payments
+
+    raw = await request.body()
+    if not payments.webhook_ok(raw, request.headers.get("x-webhook-timestamp"), request.headers.get("x-webhook-signature")):
+        raise HTTPException(401, "bad signature")
+    try:
+        return await payments.on_webhook(await request.json())
+    except payments.CheckoutError:
+        return {"ok": False, "reason": "unknown order"}
+
+
 def _strip_quoted(text: str) -> str:
     import re
 

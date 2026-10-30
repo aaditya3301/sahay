@@ -443,6 +443,44 @@ async def widget_cart(body: CartBody, request: Request):
     return jsonable({"ok": True, "cart_id": row["id"], "items": len(items), "total_inr": total / 100})
 
 
+class CheckoutBody(BaseModel):
+    key: str
+    items: list[dict] = []
+    name: str = ""
+    phone: str = ""
+    email: str | None = None
+
+
+class ConfirmBody(BaseModel):
+    key: str
+    order_id: str
+
+
+@router.post("/v1/widget/checkout")
+async def widget_checkout(body: CheckoutBody, request: Request):
+    """Storefront checkout: price the cart, save the order, open a Cashfree payment session (see payments.py)."""
+    from app import payments
+
+    limit(request, "checkout", 10)
+    tid = await _site_tenant(body.key)
+    try:
+        return jsonable(await payments.create_checkout(tid, body.key, body.items, body.name, body.phone, body.email))
+    except payments.CheckoutError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/v1/widget/checkout/confirm")
+async def widget_checkout_confirm(body: ConfirmBody, request: Request):
+    from app import payments
+
+    limit(request, "checkout-confirm", 20)
+    tid = await _site_tenant(body.key)
+    try:
+        return jsonable(await payments.confirm(tid, body.order_id))
+    except payments.CheckoutError as e:
+        raise HTTPException(404, str(e))
+
+
 @router.get("/u/{token}")
 async def unsubscribe(token: str):
     try:

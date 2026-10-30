@@ -89,6 +89,14 @@ class Settings(BaseSettings):
     livekit_sip_trunk_id: str = ""  # outbound trunk for real phone calls (ST_...)
     sarvam_api_key: str = ""  # platform key; a business's own key in Integrations → Sarvam wins
     voice_api_url: str = ""  # where the worker reaches this API (default http://127.0.0.1:$PORT)
+    # Cashfree payments for the demo storefronts (sandbox keys from merchant.cashfree.com → Developers)
+    cashfree_app_id: str = ""
+    cashfree_secret_key: str = ""
+    cashfree_api_url: str = "https://sandbox.cashfree.com/pg"
+    cashfree_api_version: str = "2025-01-01"
+    cashfree_env: str = "sandbox"  # sandbox | production
+    # Sandbox demo: coming back from the payment page counts as paid even if no test payment was made
+    payments_confirm_on_return: bool = True
     # Telegram: one platform bot for every business (customers verify with order id + name)
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""

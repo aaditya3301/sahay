@@ -60,7 +60,8 @@ TOOL_SPECS: dict[str, dict] = {
                              "parameters": _obj({})},
     "list_customer_orders": {"kind": "read", "description": "Recent orders of THIS customer (matched by their phone/email).",
                              "parameters": _obj({})},
-    "get_order": {"kind": "read", "description": "Details of one order of this customer, including shipment status and delivery date.",
+    "get_order": {"kind": "read", "description": "Details of one order of this customer, including shipment status and delivery date. "
+                  "Orders placed and paid on the shop's website (ids like LL-7KQ3XD) open with the order id alone; ask for it.",
                   "parameters": _obj({"order_ref": S}, ["order_ref"])},
     "track_shipment": {"kind": "read", "description": "Courier, AWB, live shipment status and ETA for an order.",
                        "parameters": _obj({"order_ref": S}, ["order_ref"])},
@@ -389,7 +390,8 @@ async def _call_tool(ctx: ToolContext, name: str, args: dict) -> dict:
     if name == "list_customer_orders":
         ids = await customer_identities(ctx)
         if (ctx.conversation or {}).get("channel") == "webchat" and not (ids["phones"] or ids["emails"]):
-            return {"orders": [], "note": "This web visitor has not verified a phone yet. If they ask about an order, call request_verification."}
+            return {"orders": [], "note": "This web visitor has not verified a phone yet. If they ask about an order, ask for the order id "
+                                          "(website orders look like LL-7KQ3XD) and call get_order, or call request_verification."}
         orders: list[dict] = []
         for p in list(ids["phones"])[:2]:
             orders += await shop.find_orders(phone=p)
@@ -403,6 +405,10 @@ async def _call_tool(ctx: ToolContext, name: str, args: dict) -> dict:
         return {"orders": uniq[:6], "note": None if uniq else "No orders found for this customer's phone/email. Ask for the order number."}
     if name in ("get_order", "track_shipment"):
         order, belongs = await owned_order(ctx, args.get("order_ref", ""))
+        # a website order's id is random (payments.REF_ALPHABET), so quoting it is proof enough to read it; actions still check ownership
+        if order and not belongs and "cashfree" in (order.get("tags") or []) and "-" in order["order_ref"]:
+            belongs = True
+            order = {**order, "customer_phone": None, "customer_email": None, "note": "Opened with the order id the customer gave."}
         if not order or not belongs:
             return {"found": False, "note": "No order with that number for this customer. Ask them to re-check the number or the phone/email used."}
         if name == "track_shipment":

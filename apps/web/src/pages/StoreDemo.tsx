@@ -1,11 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { ArrowRight, MessageCircle, ShoppingBag, X } from 'lucide-react'
+import { ArrowRight, Check, Copy, MessageCircle, ShoppingBag, X } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import './StoreDemo.css'
 
 type Product = { sku: string; title: string; description?: string; price_inr: number; in_stock: boolean; image?: string }
 type StoreConfig = { name: string; slug: string; brand_color?: string; agent_name?: string }
+type Placed = { order_id: string; paid: boolean; demo: boolean; total_inr: number; items: { title: string; qty: number }[]; expected_delivery?: string | null; customer_name: string }
+
+// Cashfree's hosted checkout (JS SDK v3): load once, then redirect the shopper to the payment page
+const CASHFREE_SDK = 'https://sdk.cashfree.com/js/v3/cashfree.js'
+function loadCashfree(): Promise<any> {
+  const w = window as any
+  if (w.Cashfree) return Promise.resolve(w.Cashfree)
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = CASHFREE_SDK; s.async = true
+    s.onload = () => resolve(w.Cashfree); s.onerror = () => reject(new Error('The payment page couldn’t load. Check your connection.'))
+    document.head.appendChild(s)
+  })
+}
 const money = (amount: number) => `₹${amount.toLocaleString('en-IN')}`
 
 // Demo commerce stays on the existing widget API: product context, cart reporting and checkout.
@@ -17,11 +31,38 @@ export default function StoreDemo() {
   const [featuredSku, setFeaturedSku] = useState<string | null>(null)
   const [cart, setCart] = useState<Record<string, number>>({})
   const [checkout, setCheckout] = useState(false)
-  const [contact, setContact] = useState({ name: '', phone: '' })
-  const [left, setLeft] = useState(false)
+  const [contact, setContact] = useState({ name: '', phone: '', email: '' })
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState('')
+  const [placed, setPlaced] = useState<Placed | null>(null)
+  const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
   const storefront = useRef<HTMLDivElement>(null)
   const checkoutDialog = useRef<HTMLDialogElement>(null)
+  const placedDialog = useRef<HTMLDialogElement>(null)
+
+  // Back from Cashfree: /store/<key>?order_id=…  → confirm the payment and show the order id
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const orderId = params.get('order_id')
+    if (!orderId || !key) return
+    window.history.replaceState(null, '', window.location.pathname)
+    fetch('/v1/widget/checkout/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, order_id: orderId }) })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.detail || 'We couldn’t find that order.'); return d })
+      .then((d: Placed) => {
+        setPlaced(d); setCart({})
+        // tell the chat assistant about the order, once the widget has loaded
+        let tries = 0
+        const tell = () => { const sahay = (window as any).Sahay; if (sahay) sahay('setContext', { order_id: d.order_id, order_paid: d.paid }); else if (tries++ < 20) setTimeout(tell, 500) }
+        tell()
+      })
+      .catch((e) => setPayError(e.message))
+  }, [key])
+
+  useEffect(() => {
+    const dialog = placedDialog.current
+    if (placed && dialog && !dialog.open) dialog.showModal()
+  }, [placed])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -85,6 +126,22 @@ export default function StoreDemo() {
     S()?.('setContext', { cart: list })
   }
   const add = (p: Product) => { const next = { ...cart, [p.sku]: (cart[p.sku] || 0) + 1 }; setCart(next); report(next) }
+  const pay = async () => {
+    setPayError(''); setPaying(true)
+    report(cart)
+    try {
+      const r = await fetch('/v1/widget/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, items, name: contact.name, phone: contact.phone, email: contact.email || null }) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.detail || 'The payment page couldn’t be opened.')
+      const Cashfree = await loadCashfree()
+      await Cashfree({ mode: d.mode }).checkout({ paymentSessionId: d.payment_session_id, redirectTarget: '_self' })
+    } catch (e: any) { setPayError(e.message || String(e)); setPaying(false) }
+  }
+  const copyOrderId = async () => {
+    if (!placed) return
+    try { await navigator.clipboard.writeText(placed.order_id); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { /* the id is on screen */ }
+  }
   const total = items.reduce((t, i) => t + (products.find((p) => p.sku === i.sku)?.price_inr || 0) * i.qty, 0)
   const count = items.reduce((n, i) => n + i.qty, 0)
   const farm = cfg?.slug === 'ganga-farms'
@@ -162,13 +219,31 @@ export default function StoreDemo() {
             <div className="store-checkout-items">{items.map((i) => <div key={i.sku}><span>{i.qty} × {products.find((p) => p.sku === i.sku)?.title}</span><span>{money((products.find((p) => p.sku === i.sku)?.price_inr || 0) * i.qty)}</span></div>)}</div>
             <div className="store-checkout-total"><span>Total</span><span>{money(total)}</span></div>
             <label>Your name<input autoComplete="name" placeholder="Name" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} /></label>
-            <label>WhatsApp number<input type="tel" autoComplete="tel" placeholder="Mobile number" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} onBlur={() => report(cart)} /></label>
-            <button className="store-button store-checkout-continue" onClick={() => { report(cart); setLeft(true); setCheckout(false) }}>Continue to payment<ArrowRight size={18} /></button>
-            <p className="store-demo-note">This is a demo. No payment is taken. Your cart is saved for a follow-up reminder.</p>
+            <label>Mobile number<input type="tel" autoComplete="tel" inputMode="numeric" placeholder="10-digit mobile number" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} onBlur={() => report(cart)} /></label>
+            <label>Email (optional)<input type="email" autoComplete="email" placeholder="For your receipt" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} /></label>
+            {payError && <p className="store-pay-error" role="alert">{payError}</p>}
+            <button className="store-button store-checkout-continue" onClick={pay} disabled={paying || contact.name.trim().length < 3 || contact.phone.replace(/\D/g, '').length < 10}>
+              {paying ? 'Opening secure payment…' : <>Pay {money(total)} securely<ArrowRight size={18} /></>}
+            </button>
+            <p className="store-demo-note">Payments by Cashfree (sandbox). No real money is taken, and returning from the payment page confirms the order.</p>
           </>}
         </div>
       </dialog>
-      {left && <div className="store-toast" role="status"><span>Demo cart saved. A reminder will follow on the next automation run.</span><button aria-label="Dismiss notification" onClick={() => setLeft(false)}><X size={18} /></button></div>}
+      <dialog ref={placedDialog} className="store-checkout store-placed" onClose={() => setPlaced(null)} aria-labelledby="placed-title">
+        {placed && <div className="store-checkout-inner" data-ui>
+          <div className="store-checkout-heading"><h2 id="placed-title">{placed.paid ? 'Order placed' : 'Payment pending'}</h2><button onClick={() => placedDialog.current?.close()} aria-label="Close"><X size={22} /></button></div>
+          <p>{placed.paid ? `Thank you, ${placed.customer_name.split(' ')[0]}! Your order is confirmed.` : 'We haven’t received the payment yet. If you paid, it will confirm shortly.'}</p>
+          <div className="store-order-id"><span>Your order ID</span><strong>{placed.order_id}</strong>
+            <button onClick={copyOrderId} aria-label="Copy order ID">{copied ? <><Check size={16} />Copied</> : <><Copy size={16} />Copy</>}</button></div>
+          <div className="store-checkout-items">{placed.items.map((i) => <div key={i.title}><span>{i.qty} × {i.title}</span></div>)}</div>
+          <div className="store-checkout-total"><span>Paid</span><span>{money(placed.total_inr)}</span></div>
+          {placed.expected_delivery && <p className="store-demo-note">Expected delivery by {new Date(placed.expected_delivery).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}.</p>}
+          <p className="store-demo-note">Keep this ID. Quote it when you chat with {cfg.agent_name || 'us'} or call us, and we’ll pull up your order straight away.</p>
+          {placed.demo && <p className="store-demo-note">Sandbox demo: marked as paid when you returned from the payment page.</p>}
+          <button className="store-button" onClick={() => { placedDialog.current?.close(); openHelp() }}><MessageCircle size={18} />Ask about this order</button>
+        </div>}
+      </dialog>
+      {payError && !checkout && <div className="store-toast" role="alert"><span>{payError}</span><button aria-label="Dismiss notification" onClick={() => setPayError('')}><X size={18} /></button></div>}
     </div>
   )
 }
