@@ -11,7 +11,7 @@ type NavGroup = { id: string; label: string; icon: ReactNode; items: NavItem[] }
 const belongsTo = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`) || (to === '/inbox' && pathname.startsWith('/tickets/'))
 
 function Wordmark() {
-  return <span className="dashboard-wordmark"><img src="/sahay-mark.svg" alt="" width="30" height="30" /><span>sahay<span>.</span></span></span>
+  return <span className="dashboard-wordmark"><img src="/sahay-mark-light.svg" alt="" width="30" height="30" /><span>sahay<span>.</span></span></span>
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
