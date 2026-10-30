@@ -17,3 +17,4 @@ dist/
 scripts/mock_site_log.json
 scripts/gemini-*.png
 scripts/shots/
+scripts/out/
