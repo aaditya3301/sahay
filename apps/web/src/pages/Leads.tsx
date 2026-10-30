@@ -30,7 +30,7 @@ export default function Leads() {
   const running = (data?.searches || []).filter((s: any) => s.status === 'running')
   return (
     <>
-      <PageHeader title="Leads" subtitle="Every prospect from the website chat, email links, WhatsApp, calls and outbound search — one pipeline."
+      <PageHeader title="Leads" subtitle="All your prospects in one pipeline."
         actions={<>
           <input className={inputCls + ' w-56'} placeholder="Search leads" value={q} onChange={(e) => setQ(e.target.value)} />
           <Button variant="secondary" onClick={() => setModal('import')}><Upload className="h-4 w-4" />Import CSV</Button>
