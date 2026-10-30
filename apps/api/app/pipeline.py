@@ -52,7 +52,7 @@ class InboundAttachment:
 
 @dataclass
 class InboundMessage:
-    channel: str  # whatsapp | email | webchat | sim
+    channel: str  # telegram | whatsapp | email | webchat | voice | sim
     text: str = ""
     from_phone: str | None = None
     from_email: str | None = None
@@ -65,6 +65,7 @@ class InboundMessage:
     is_simulation: bool = False
     verified: bool = False  # phone/email proven (WhatsApp sender, OTP, signed by the business, simulator)
     context: dict | None = None  # what the web visitor is looking at (page, product, cart)
+    identity: tuple[str, str] | None = None  # channel account, e.g. ("telegram", chat_id)
 
 
 PII_PATTERNS = [
@@ -117,6 +118,8 @@ async def resolve_customer(db, msg: InboundMessage) -> dict:
         keys.append(("email", norm_email(msg.from_email)))
     if msg.visitor_id:
         keys.append(("webchat_visitor", msg.visitor_id))
+    if msg.identity:
+        keys.append(msg.identity)
     keys = [(k, v) for k, v in keys if v]
     for k, v in keys:
         row = await db.one(
@@ -517,6 +520,7 @@ List claims you make: action_done/action_pending/action_denied with the action_i
 
 CHANNEL_RULES = {
     "whatsapp": "Short, warm, max ~5 lines, emojis sparingly, no markdown headers.",
+    "telegram": "Short, warm, max ~5 lines, emojis sparingly, plain text (no markdown).",
     "webchat": "Short and friendly, max ~5 lines.",
     "sim": "Short and friendly, max ~5 lines.",
     "email": "A proper email: greeting, 2-4 short paragraphs, sign off as the {name} support team.",
@@ -551,7 +555,7 @@ def guard(text: str, composed: Composed, actions: list[dict], customer_phone: st
     for idn in re.findall(r"(?<!\d)\d{4}\s?\d{4}\s?\d{4}(?!\d)", text):
         if re.sub(r"\D", "", idn) not in known_digits:
             problems.append("Contains an ID-like number")
-    limit = 4096 if channel == "whatsapp" else (6000 if channel == "email" else 1500)
+    limit = 4096 if channel in ("whatsapp", "telegram") else (6000 if channel == "email" else 1500)
     if len(text) > limit:
         problems.append("Too long for the channel")
     deva = len(re.findall(r"[ऀ-ॿ]", text)) / max(1, len(re.findall(r"\w", text)))

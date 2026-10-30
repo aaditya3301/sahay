@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     livekit_sip_trunk_id: str = ""  # outbound trunk for real phone calls (ST_...)
     sarvam_api_key: str = ""  # platform key; a business's own key in Integrations → Sarvam wins
     voice_api_url: str = ""  # where the worker reaches this API (default http://127.0.0.1:$PORT)
+    # Telegram: one platform bot for every business (customers verify with order id + name)
+    telegram_bot_token: str = ""
+    telegram_bot_username: str = ""
+    telegram_polling: bool = False  # dev without a public URL: read updates with getUpdates instead of the webhook
     # Optional Cloudflare Turnstile for the widget (free). Without it the widget uses a built-in proof-of-work check.
     turnstile_site_key: str = ""
     turnstile_secret: str = ""

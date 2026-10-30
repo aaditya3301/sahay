@@ -41,10 +41,15 @@ async def _customer_conv(db, name: str | None, phone: str | None, email: str | N
     from app.pipeline import InboundMessage, resolve_customer
 
     cust = await resolve_customer(db, InboundMessage(channel=channel, from_phone=phone, from_email=email, from_name=name, verified=True))
+    thread = None
+    if channel == "whatsapp":
+        thread = await db.val("SELECT value FROM customer_identities WHERE customer_id=:c AND kind='telegram' LIMIT 1", c=cust["id"])
+        if thread:
+            channel = "telegram"
     conv = await db.one("SELECT * FROM conversations WHERE customer_id=:c AND channel=:ch ORDER BY created_at DESC LIMIT 1", c=cust["id"], ch=channel)
     if not conv:
-        conv = await db.one("INSERT INTO conversations (tenant_id, customer_id, channel) VALUES (:t,:c,:ch) RETURNING *",
-                            t=db.tenant_id, c=cust["id"], ch=channel)
+        conv = await db.one("INSERT INTO conversations (tenant_id, customer_id, channel, external_thread_id) VALUES (:t,:c,:ch,:th) RETURNING *",
+                            t=db.tenant_id, c=cust["id"], ch=channel, th=thread)
     return cust, conv
 
 

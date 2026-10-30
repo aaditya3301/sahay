@@ -169,6 +169,15 @@ async def send_to_customer(db, conversation: dict, text: str, ticket_id=None, au
                                                tenant_id=db.tenant_id)
             else:
                 status = "simulated"
+        elif channel == "telegram":
+            from app import telegram
+
+            chat_id = conversation.get("external_thread_id") or await db.val(
+                "SELECT value FROM customer_identities WHERE customer_id=:c AND kind='telegram' LIMIT 1", c=conversation["customer_id"])
+            if telegram.enabled() and chat_id:
+                external_id = await telegram.send_text(chat_id, text, (interactive or {}).get("buttons"))
+            else:
+                status = "simulated"
         else:  # webchat / sim: the widget/simulator polls our API
             status = "sent"
     except Exception as e:

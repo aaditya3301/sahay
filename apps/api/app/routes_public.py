@@ -134,6 +134,23 @@ async def wa_verify(request: Request):
     raise HTTPException(403)
 
 
+@router.post("/webhooks/telegram")
+async def telegram_webhook(request: Request):
+    import hmac as _hmac
+
+    from app import telegram
+
+    if not telegram.enabled() or not _hmac.compare_digest(request.headers.get("x-telegram-bot-api-secret-token", ""), telegram.webhook_secret()):
+        raise HTTPException(401)
+    try:
+        await telegram.handle_update(await request.json())
+    except Exception:  # never make Telegram retry a message we already saw
+        import logging
+
+        logging.getLogger("sahay.telegram").exception("telegram update failed")
+    return {"ok": True}
+
+
 @router.post("/webhooks/whatsapp")
 async def wa_webhook(request: Request):
     body = await request.body()

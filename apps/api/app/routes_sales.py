@@ -566,6 +566,35 @@ async def livekit_test_call(body: DialBody, ctx: Ctx = CtxDep):
 
 
 # ---------------------------------------------------------------------------
+# Telegram bot (platform-wide)
+# ---------------------------------------------------------------------------
+@router.get("/telegram")
+async def telegram_status(ctx: Ctx = CtxDep):
+    from app import telegram
+
+    try:
+        return jsonable(await telegram.status())
+    except Exception as e:
+        raise HTTPException(502, str(e)[:200])
+
+
+@router.post("/telegram/connect")
+async def telegram_connect(ctx: Ctx = CtxDep):
+    from app import telegram
+
+    if ctx.role != "owner":
+        raise HTTPException(403, "Only an owner can connect the bot")
+    if not telegram.enabled():
+        raise HTTPException(400, "TELEGRAM_BOT_TOKEN isn't set on the server")
+    if not settings.public_base_url.startswith("https://"):
+        raise HTTPException(400, "Telegram needs a public https:// address; locally, run with TELEGRAM_POLLING=1 instead")
+    try:
+        return jsonable(await telegram.connect_webhook())
+    except Exception as e:
+        raise HTTPException(502, str(e)[:200])
+
+
+# ---------------------------------------------------------------------------
 # Developers: outgoing webhooks, incoming events, Integration Health
 # ---------------------------------------------------------------------------
 class WebhookBody(BaseModel):
@@ -671,7 +700,17 @@ async def integration_health(ctx: Ctx = CtxDep):
         add("webhooks", "Webhooks to you", "amber" if not wh["eps"] else ("red" if wh["bad"] and not wh["ok"] else "green"),
             f"{wh['eps']} endpoint(s) · {wh['ok']} delivered, {wh['bad']} failed (7 days)" if wh["eps"] else "None set (optional)")
         wa, em, sv = await integration(db, "whatsapp"), await integration(db, "email"), await integration(db, "sarvam")
-        add("whatsapp", "WhatsApp", "green" if wa.get("access_token") else "amber", "connected" if wa.get("access_token") else "simulated until you add Meta credentials")
+        from app import telegram
+
+        tg = None
+        if telegram.enabled():
+            try:
+                tg = await telegram.status()
+            except Exception as e:
+                tg = {"error": str(e)[:120]}
+        add("telegram", "Telegram bot", "green" if tg and tg.get("webhook_url") == tg.get("webhook_expected") else ("red" if tg and tg.get("error") else "amber"),
+            ("not set up (TELEGRAM_BOT_TOKEN)" if not tg else tg.get("error") or
+             (f"@{tg['username']} connected" if tg.get("webhook_url") == tg.get("webhook_expected") else f"@{tg['username']}: webhook not pointed at this server")))
         add("email", "Email", "green" if email_ready(em) else "amber",
             "connected (Brevo)" if email_ready(em) else "simulated until you add a Brevo key and a verified sender")
         last_call = await db.val("SELECT max(created_at) FROM voice_calls")

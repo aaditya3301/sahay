@@ -35,7 +35,7 @@ async def main() -> None:
             "WHERE c.relkind='r' AND c.relnamespace='public'::regnamespace"
         )
         unforced = [r["relname"] for r in rls if not (r["relrowsecurity"] and r["relforcerowsecurity"])]
-        global_ok = {"tenant_members", "channel_routes"}
+        global_ok = {"tenant_members", "channel_routes", "telegram_chats"}
         bad = [t for t in unforced if t not in global_ok]
         print(f"schema applied; tenant tables with forced RLS: {len(rls) - len(unforced)}")
         if bad:

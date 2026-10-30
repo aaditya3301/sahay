@@ -13,6 +13,7 @@ from app.routes_sales import router as sales_router
 from app.routes_widget import router as widget_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # request lines would print bot tokens that live in URLs (Telegram)
 
 app = FastAPI(title="Sahay API", version="0.1.0", docs_url="/api-docs", redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -40,6 +41,10 @@ async def warm_up():
             pass
 
     asyncio.get_event_loop().create_task(ping())
+    from app import telegram
+
+    if telegram.enabled() and settings.telegram_polling:
+        asyncio.get_event_loop().create_task(telegram.poll_forever())
 
 
 @app.exception_handler(ValueError)

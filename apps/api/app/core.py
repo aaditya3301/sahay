@@ -209,7 +209,8 @@ async def security_event(db, kind: str, detail: str, ticket_id: Any = None, seve
 def norm_phone(p: str | None) -> str | None:
     if not p:
         return None
-    digits = re.sub(r"\D", "", p)
+    # Indian caller ID often arrives as 0XXXXXXXXXX (trunk prefix) or 0091XXXXXXXXXX (international prefix)
+    digits = re.sub(r"\D", "", p).lstrip("0")
     if len(digits) == 10:
         digits = "91" + digits
     return "+" + digits if digits else None
