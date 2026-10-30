@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sahay Developer Docs</title>
+<style>
+  :root { --c: #4f46e5; --ink: #0f172a; --mut: #475569; --line: #e2e8f0; --bg: #ffffff; --code: #0f172a; --codeink: #e2e8f0; --soft: #f8fafc; }
+  @media (prefers-color-scheme: dark) { :root { --ink: #e2e8f0; --mut: #94a3b8; --line: #1e293b; --bg: #0b1120; --soft: #111827; --code: #020617; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.6 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  .wrap { display: grid; grid-template-columns: 240px minmax(0, 1fr); max-width: 1200px; margin: 0 auto; }
+  nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 24px 16px; border-right: 1px solid var(--line); font-size: 14px; }
+  nav b { display: block; margin: 16px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); }
+  nav a { display: block; padding: 3px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; }
+  nav a:hover { background: var(--soft); }
+  main { padding: 32px 40px 80px; min-width: 0; }
+  h1 { font-size: 30px; margin: 0 0 4px; } h2 { margin-top: 48px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 22px; } h3 { margin-top: 28px; font-size: 17px; }
+  p, li { color: var(--mut); } strong { color: var(--ink); }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+  pre { background: var(--code); color: var(--codeink); padding: 14px 16px; border-radius: 10px; overflow-x: auto; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 12px 0; display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink); font-weight: 600; } td { color: var(--mut); }
+  .levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 16px 0; }
+  .lv { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--soft); }
+  .lv b { color: var(--c); } .lv p { margin: 6px 0 0; font-size: 14px; }
+  .note { border-left: 3px solid var(--c); background: var(--soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  .tabs { display: flex; gap: 4px; margin-top: 12px; } .tabs button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 4px 12px; border-radius: 8px 8px 0 0; cursor: pointer; font: inherit; font-size: 13px; }
+  .tabs button.on { background: var(--code); color: var(--codeink); border-color: var(--code); }
+  .tab { display: none; margin-top: 0; } .tab.on { display: block; } .tab pre { margin-top: 0; border-top-left-radius: 0; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); } main { padding: 20px 16px 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <a href="#top"><strong>Sahay docs</strong></a>
+  <b>Start</b><a href="#model">How it fits together</a><a href="#levels">Connect in 3 levels</a><a href="#keys">Keys &amp; security</a>
+  <b>Level 1</b><a href="#widget">Website widget</a>
+  <b>Level 2</b><a href="#identify">Identify customers</a><a href="#events">Send events</a>
+  <b>Level 3</b><a href="#contract">Commerce Contract</a><a href="#handler">Your endpoint</a>
+  <b>Both ways</b><a href="#rest">REST API</a><a href="#webhooks">Webhooks</a>
+  <b>Platforms</b><a href="#shopify">Shopify &amp; WooCommerce</a><a href="#voice">Voice (Sarvam)</a>
+  <b>Reference</b><a href="#tickets">How tickets work</a><a href="#testing">Testing</a><a href="/docs/commerce-contract.json">OpenAPI: Commerce Contract</a><a href="/api-docs">API reference</a>
+</nav>
+<main>
+<h1 id="top">Sahay for developers</h1>
+<p>Put your business's AI sales &amp; support agent on your own website, keep it up to date with your orders, and let it act on them, whatever your site is built with.</p>
+
+<h2 id="model">How it fits together</h2>
+<p><strong>Tickets and conversations live in Sahay. Orders, products and customers live with you.</strong> Connectors join the two.</p>
+<ul>
+  <li>Every message (widget, WhatsApp, email, phone, your contact form) becomes a conversation in Sahay. Support issues become tickets (numbered per business, like <code>LL-1042</code>); buying chats become leads.</li>
+  <li>When the AI needs facts or actions it calls one fixed list of actions, the <a href="#contract">Commerce Contract</a>. Shopify, WooCommerce and custom sites each have an adapter, so the AI never cares which platform is behind it.</li>
+  <li>The AI proposes, your rules decide: every action (refund, return, cancel) passes Sahay's policy check before your endpoint is called.</li>
+</ul>
+
+<h2 id="levels">Connect in 3 levels</h2>
+<div class="levels">
+  <div class="lv"><b>Level 1 · 5 minutes</b><p>Paste the widget. The AI answers FAQs and policies from your website, captures leads, creates tickets and collects order numbers and photos for your team.</p></div>
+  <div class="lv"><b>Level 2 · ~1 hour</b><p>Sign logged-in customers and send order/product events. The AI knows who's chatting, gives live order status and sends proactive updates.</p></div>
+  <div class="lv"><b>Level 3 · ~half a day</b><p>Expose one endpoint for the Commerce Contract. The AI can check live stock and do returns, exchanges and cancellations, inside your rules.</p></div>
+</div>
+
+<h2 id="keys">Keys &amp; security</h2>
+<table>
+  <tr><th>Key</th><th>Where</th><th>Used for</th></tr>
+  <tr><td><code>pk_…</code> site key</td><td>Browser (public)</td><td>Loads the widget. Works only on the domains you allow in Agent Studio → Website widget.</td></tr>
+  <tr><td><code>sk_…</code> secret key</td><td>Your server only</td><td>Signing customers, sending events, the REST API, verifying our calls to your endpoint. Rotate it in Agent Studio.</td></tr>
+  <tr><td><code>whsec_…</code></td><td>Your webhook receiver</td><td>Verifying webhooks we send you.</td></tr>
+</table>
+<p>Requests between our servers and yours are signed and timestamped: <code>X-Sahay-Timestamp</code> and <code>X-Sahay-Signature: sha256=HMAC_SHA256(secret, "&lt;timestamp&gt;.&lt;raw body&gt;")</code>. Reject anything older than 5 minutes. Events carry an <code>id</code>; sending the same id twice is ignored. Store credentials (Shopify, WooCommerce, Sarvam tokens) are encrypted at rest.</p>
+
+<h2 id="widget">Level 1 · Website widget</h2>
+<div class="tabs" data-group="w"><button class="on">Script tag</button><button>npm</button><button>React</button></div>
+<div class="tab on" data-group="w"><pre><code>&lt;script src="https://sahay-536440059442.asia-south1.run.app/widget.js" data-site-key="pk_yourbrand_xxx" async&gt;&lt;/script&gt;</code></pre></div>
+<div class="tab" data-group="w"><pre><code>npm i @sahay/widget
+
+import { init, setContext, cart } from '@sahay/widget'
+init({ siteKey: 'pk_yourbrand_xxx' })
+setContext({ productSku: 'SKU-123', productTitle: 'Runner 9' })   // what the visitor is looking at
+cart({ items: [{ sku: 'SKU-123', qty: 1 }], phone: '9876543210' })   // abandoned-cart reminders</code></pre></div>
+<div class="tab" data-group="w"><pre><code>import { SahayChat } from '@sahay/widget/react'
+&lt;SahayChat siteKey="pk_yourbrand_xxx" context={{ productSku: product.sku }} /&gt;</code></pre></div>
+<p>The chat runs in an iframe, so your CSS can't break it. Visitors can also tap the mic for a voice conversation in the browser. Every new chat passes an invisible bot check, and daily message caps protect your AI spend.</p>
+
+<h2 id="identify">Level 2 · Identify logged-in customers</h2>
+<p>Sign the customer on your server, pass the result to the widget. Signed customers can see their orders without an OTP; anonymous visitors verify their phone inside the chat first.</p>
+<div class="tabs" data-group="i"><button class="on">Node</button><button>Python</button><button>PHP</button></div>
+<div class="tab on" data-group="i"><pre><code>import { Sahay } from '@sahay/node'
+const sahay = new Sahay(process.env.SAHAY_SECRET_KEY)
+
+app.get('/account', (req, res) =&gt; {
+  const { user, userHash } = sahay.identify({ email: req.user.email, name: req.user.name })
+  res.render('account', { sahayInit: { siteKey: 'pk_yourbrand_xxx', user, userHash } })
+})
+// browser: init(sahayInit)</code></pre></div>
+<div class="tab" data-group="i"><pre><code>from sahay import Sahay            # packages/python-sdk/sahay.py (standard library only)
+sahay = Sahay(os.environ["SAHAY_SECRET_KEY"])
+signed = sahay.identify(email=user.email, name=user.name)   # {"user": {...}, "userHash": "..."}</code></pre></div>
+<div class="tab" data-group="i"><pre><code>require 'Sahay.php';                 // packages/php-sdk/Sahay.php
+$sahay = new Sahay(getenv('SAHAY_SECRET_KEY'));
+$signed = $sahay-&gt;identify(['email' =&gt; $user-&gt;email, 'name' =&gt; $user-&gt;name]);</code></pre></div>
+<p class="note">No SDK? <code>userHash = HMAC_SHA256(secret_key, lowercase(email or phone))</code> as hex.</p>
+
+<h2 id="events">Level 2 · Send events</h2>
+<pre><code>POST /v1/api/events
+Authorization: Bearer sk_...
+{ "id": "evt_9f2", "type": "order.shipped",
+  "data": { "orderRef": "5531", "customerName": "Rahul Verma", "customerPhone": "9876543210",
+            "items": [{ "sku": "RUN-9", "title": "Runner 9", "qty": 1, "price": 2499 }], "total": 2499,
+            "paymentMethod": "cod", "courier": "Delhivery", "trackingNumber": "AWB123", "trackingUrl": "https://..." } }</code></pre>
+<p>Send one event or <code>{"events": [...]}</code> (up to 100). What Sahay does with each:</p>
+<table>
+  <tr><th>Type</th><th>Effect</th></tr>
+  <tr><td><code>order.created</code> · <code>order.placed</code> · <code>order.updated</code> · <code>order.paid</code></td><td>Order saved so the AI can answer "where is my order" without your endpoint</td></tr>
+  <tr><td><code>order.shipped</code></td><td>Saved + the customer gets a WhatsApp with courier and tracking; joins any open ticket about that order</td></tr>
+  <tr><td><code>order.delivered</code> · <code>order.cancelled</code></td><td>Status updated; if a ticket is open for it, the customer is told</td></tr>
+  <tr><td><code>return.created</code> · <code>return.shipped</code> · <code>exchange.shipped</code></td><td>Pickup / replacement update sent and added to the ticket</td></tr>
+  <tr><td><code>product.created</code> · <code>product.updated</code> · <code>product.deleted</code></td><td>Catalogue for product search and live price/stock answers</td></tr>
+  <tr><td><code>customer.created</code> · <code>customer.updated</code></td><td>One customer record (matched by email, phone or your <code>id</code>); <code>vip</code> flag respected</td></tr>
+  <tr><td><code>cart.updated</code> · <code>checkout.abandoned</code></td><td>One gentle cart reminder later (never if they ordered, opted out or are upset)</td></tr>
+</table>
+<pre><code>await sahay.events.send('order.shipped', { orderRef: '5531', courier: 'Delhivery', trackingUrl: 'https://...' })</code></pre>
+
+<h2 id="contract">Level 3 · The Commerce Contract</h2>
+<p>One endpoint on your server answers these actions. Implement only what you support; anything else, the AI hands to your team.</p>
+<table>
+  <tr><th>Action</th><th>Params</th><th>Return</th></tr>
+  <tr><td><code>getOrder</code></td><td><code>orderRef</code></td><td>Order or <code>null</code></td></tr>
+  <tr><td><code>findOrders</code></td><td><code>phone</code>, <code>email</code>, <code>limit</code></td><td>Order[] (newest first)</td></tr>
+  <tr><td><code>searchProducts</code></td><td><code>query</code>, <code>limit</code></td><td>Product[]</td></tr>
+  <tr><td><code>getProduct</code> · <code>checkStock</code></td><td><code>sku</code></td><td>Product · <code>{ stock }</code></td></tr>
+  <tr><td><code>createReturn</code></td><td><code>orderRef</code>, <code>skus</code>, <code>reason</code>, <code>type</code> (return | exchange)</td><td><code>{ returnId, pickupDate }</code></td></tr>
+  <tr><td><code>cancelOrder</code></td><td><code>orderRef</code>, <code>reason</code></td><td><code>{ cancelled: true }</code></td></tr>
+  <tr><td><code>refundOrder</code></td><td><code>orderRef</code>, <code>amount</code>, <code>reason</code></td><td><code>{ refundId }</code></td></tr>
+  <tr><td><code>updateAddress</code> · <code>rescheduleDelivery</code></td><td><code>orderRef</code> + <code>address</code> | <code>date</code></td><td><code>{ updated: true }</code></td></tr>
+  <tr><td><code>createCoupon</code> · <code>tagOrder</code></td><td><code>value</code>, <code>customerRef</code> · <code>orderRef</code>, <code>tag</code></td><td><code>{ code }</code> · <code>{}</code></td></tr>
+</table>
+<p><strong>Order</strong>: <code>{ orderRef, customerName, customerPhone, customerEmail, items: [{ sku, title, qty, price }], total, paymentMethod, status, courier, trackingNumber, trackingUrl, expectedDelivery, deliveredAt, placedAt }</code>. <strong>Product</strong>: <code>{ sku, title, price, stock, category, description }</code>. Prices in rupees.</p>
+<p>Request: <code>POST your-url</code> with <code>{"action": "getOrder", "params": {...}, "request_id": "..."}</code> and the signature headers. Response: <code>{"ok": true, "data": ...}</code>, or <code>{"ok": false, "error": "not_supported"}</code> (404). Answer within 8 seconds (phone calls need under ~1 second; keep it fast). Machine-readable spec: <a href="/docs/commerce-contract.json">commerce-contract.json</a>.</p>
+<div class="note">Refunds, returns and cancellations only reach your endpoint after Sahay's policy check allows them (or a person approves). The AI can't talk its way past your rules.</div>
+
+<h2 id="handler">Your endpoint</h2>
+<div class="tabs" data-group="h"><button class="on">Node / Express</button><button>Python / FastAPI</button><button>PHP</button></div>
+<div class="tab on" data-group="h"><pre><code>import express from 'express'
+import { Sahay } from '@sahay/node'
+const sahay = new Sahay(process.env.SAHAY_SECRET_KEY)
+const app = express()
+
+// mount BEFORE express.json(): the handler needs the raw body to check the signature
+app.post('/sahay', express.text({ type: '*/*' }), sahay.handler({
+  getOrder: async ({ orderRef }) =&gt; toContract(await db.orders.find(orderRef)),
+  findOrders: async ({ phone, email }) =&gt; (await db.orders.byCustomer(phone, email)).map(toContract),
+  checkStock: async ({ sku }) =&gt; ({ stock: await db.stock(sku) }),
+  createReturn: async ({ orderRef, skus, reason, type }) =&gt; db.returns.create({ orderRef, skus, reason, type }),
+}))</code></pre></div>
+<div class="tab" data-group="h"><pre><code>from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sahay import Sahay
+sahay, app = Sahay(os.environ["SAHAY_SECRET_KEY"]), FastAPI()
+
+@app.post("/sahay")
+async def sahay_endpoint(request: Request):
+    status, body = sahay.handle(await request.body(), dict(request.headers), {
+        "getOrder": lambda orderRef: to_contract(get_order(orderRef)),
+        "checkStock": lambda sku: {"stock": stock_of(sku)},
+        "createReturn": lambda orderRef, skus, reason, type: create_return(orderRef, skus, reason, type),
+    })
+    return JSONResponse(body, status_code=status)</code></pre></div>
+<div class="tab" data-group="h"><pre><code>// sahay.php on your server
+require 'Sahay.php';
+$sahay = new Sahay(getenv('SAHAY_SECRET_KEY'));
+$sahay-&gt;handle([
+  'getOrder'   =&gt; fn($p) =&gt; to_contract(get_order($p['orderRef'])),
+  'checkStock' =&gt; fn($p) =&gt; ['stock' =&gt; stock_of($p['sku'])],
+]);</code></pre></div>
+<p>Then in the dashboard: <strong>Integrations → Connect your store → Custom website</strong>, paste your endpoint URL. Integration Health sends a signed <code>ping</code> and turns green.</p>
+
+<h2 id="rest">REST API (your site → Sahay)</h2>
+<table>
+  <tr><th>Call</th><th>What it does</th></tr>
+  <tr><td><code>POST /v1/api/tickets</code></td><td>Create a ticket from your contact form: <code>{ customer: { name, email, phone, external_id }, subject, message, order_ref }</code>. The AI triages and replies by email/WhatsApp.</td></tr>
+  <tr><td><code>GET /v1/api/tickets?email=…</code> · <code>?phone=…</code> · <code>?ref=LL-1042</code></td><td>A customer's tickets with status (for your "My requests" page)</td></tr>
+  <tr><td><code>POST /v1/api/leads</code></td><td>Create a sales lead: <code>{ name, email, phone, company, interest, notes }</code> (scored automatically)</td></tr>
+  <tr><td><code>POST /v1/api/events</code></td><td>See <a href="#events">events</a></td></tr>
+  <tr><td><code>GET /v1/api/ping</code></td><td>Check your secret key</td></tr>
+</table>
+<pre><code>curl https://sahay-536440059442.asia-south1.run.app/v1/api/ping -H "Authorization: Bearer sk_..."</code></pre>
+
+<h2 id="webhooks">Webhooks (Sahay → your systems)</h2>
+<p>Add an endpoint in <strong>Integrations → Webhooks</strong> (your Slack workflow, CRM, Zapier…). Events: <code>ticket.created</code>, <code>ticket.escalated</code>, <code>ticket.resolved</code>, <code>lead.created</code>, <code>call.completed</code>. Failed deliveries retry after ~10s and ~60s; every attempt is logged.</p>
+<pre><code>POST your-url
+X-Sahay-Event: ticket.escalated
+X-Sahay-Timestamp: 1793368000
+X-Sahay-Signature: sha256=…
+{ "id": "…", "type": "ticket.escalated", "created_at": 1793368000,
+  "data": { "ref": "UK-1042", "status": "escalated", "intent": "exchange_size", "summary": "…",
+            "customer": { "name": "Rahul", "email": "…", "phone": "…" }, "order_refs": ["5531"], "url": "https://…/tickets/…" } }
+
+// verify
+Sahay.verifyWebhook(rawBody, req.headers, process.env.SAHAY_WEBHOOK_SECRET)</code></pre>
+
+<h2 id="shopify">Shopify &amp; WooCommerce</h2>
+<p><strong>Shopify:</strong> add the app embed block (<code>integrations/shopify</code>) and connect the store with an Admin API token in Integrations. Orders, products, stock and abandoned checkouts come through the Shopify adapter. <strong>WooCommerce / WordPress:</strong> install the plugin (<code>integrations/wordpress/sahay-chat.php</code>) for the widget and paste a WooCommerce REST key (read/write) in Integrations. The AI uses the same Commerce Contract either way.</p>
+
+<h2 id="voice">Voice agent (Sarvam)</h2>
+<p>Sarvam rents the phone number and does the listening and speaking (Hindi, Hinglish and 10 more Indian languages); Sahay stays the brain. Setup is one time per business in <strong>Agent Studio → Voice agent</strong>, which gives you the prompt, the on-start hook, one cURL per tool and the webhook URL to paste into Sarvam.</p>
+<ol>
+  <li><strong>Before hello</strong>: Sarvam's on-start hook calls <code>/v1/voice/sarvam/start</code>; we find the business and the caller and return their name, orders and open tickets as agent variables.</li>
+  <li><strong>During the call</strong>: Sarvam calls our tools (<code>/v1/voice/sarvam/tools/get_order</code>, <code>…/create_return</code>, <code>…/send_link_whatsapp</code>, <code>…/transfer_to_human</code>). Same rules as chat; each tool returns one short line to speak.</li>
+  <li><strong>After</strong>: the call webhook sends the transcript; it lands on the customer's timeline and updates the ticket.</li>
+  <li><strong>Outbound</strong>: COD confirmations and callbacks are dialed through Sarvam's outbound API.</li>
+</ol>
+<p>Cost: about ₹3–3.50 per minute plus telephony; an Indian number is about ₹59 per 30 days. Browser voice calls from the widget cost nothing in telephony. Prefer your own pipeline? The same tools are available at <code>/v1/voice/calls/*</code> with your secret key.</p>
+
+<h2 id="tickets">How tickets work</h2>
+<ul>
+  <li>One customer record per business, matched by email, phone or your customer id: a WhatsApp, an email and a call from the same person land on the same customer.</li>
+  <li>A new message about the same order while a ticket is open joins that ticket. A reply within 7 days of resolution reopens it.</li>
+  <li>States: open → AI working → resolved by AI · waiting on customer · pending approval · escalated → resolved → closed. Each ticket keeps intent, urgency, sentiment, linked orders, SLA timer and a full log of every AI step.</li>
+  <li>Using Freshdesk/Zendesk? Subscribe a webhook to <code>ticket.*</code> to mirror tickets there.</li>
+</ul>
+
+<h2 id="testing">Testing</h2>
+<ul>
+  <li><strong>Sandbox:</strong> every workspace starts on the demo store (fake orders and products), so you can test the widget, events and tools before connecting your real store.</li>
+  <li><strong>Integration Health</strong> (dashboard → Integrations) shows green/amber/red for widget, store, events, webhooks, WhatsApp, email, voice and automations.</li>
+  <li><strong>Webhook tester:</strong> "Send test" on any webhook endpoint shows the status code we got back.</li>
+  <li><strong>Customer simulator</strong> and <strong>AI mystery shoppers</strong> test the agent end to end.</li>
+</ul>
+</main>
+</div>
+<script>
+  document.querySelectorAll('.tabs').forEach(function (t) {
+    var g = t.dataset.group, btns = t.querySelectorAll('button'), panes = document.querySelectorAll('.tab[data-group="' + g + '"]');
+    btns.forEach(function (b, i) { b.onclick = function () { btns.forEach(function (x) { x.classList.remove('on'); }); panes.forEach(function (x) { x.classList.remove('on'); }); b.classList.add('on'); panes[i].classList.add('on'); }; });
+  });
+</script>
+</body>
+</html>
