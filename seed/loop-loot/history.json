@@ -1,0 +1,30 @@
+{
+  "days": 14,
+  "scenarios": [
+    {"key": "chain_break", "intent": "damaged_item", "sku": "CHM-SET-07", "courier": "Delhivery", "count_this_week": 14, "count_last_week": 4,
+     "sentiment": [-0.8, -0.3], "resolution": "ai_auto",
+     "describe": "the Celestial Charm Set chain arrived snapped near the clasp / charm fell off; customer often sends a photo"},
+    {"key": "blr_delay", "intent": "delivery_delay", "courier": "Delhivery", "pincodes": ["560034", "560076", "560102"], "count_this_week": 9, "count_last_week": 3,
+     "sentiment": [-0.7, -0.2], "resolution": "ai_auto",
+     "describe": "order to Bengaluru stuck at the Delhivery hub for days past the promised date"},
+    {"key": "earring_colour", "intent": "wrong_item", "sku": "CHM-ERG-05", "courier": "Xpressbees", "count_this_week": 5, "count_last_week": 4,
+     "sentiment": [-0.5, -0.1], "resolution": "ai_assisted",
+     "describe": "pastel hoop earrings colour looks different from the website (lilac looks grey)"},
+    {"key": "ring_size", "intent": "exchange_size", "sku": "CHM-RNG-06", "courier": "Ecom Express", "count_this_week": 4, "count_last_week": 4,
+     "sentiment": [-0.3, 0.1], "resolution": "ai_auto",
+     "describe": "stackable rings too loose or too tight, wants a different size"},
+    {"key": "wismo", "intent": "order_status", "count_this_week": 18, "count_last_week": 16,
+     "sentiment": [-0.2, 0.3], "resolution": "ai_auto", "complaint": false,
+     "describe": "asking where the order is / when it will arrive"},
+    {"key": "praise", "intent": "praise", "count_this_week": 6, "count_last_week": 5,
+     "sentiment": [0.6, 1.0], "resolution": "ai_auto", "complaint": false,
+     "describe": "loves the charms, says thank you, sends a happy message"}
+  ],
+  "gaps": [
+    "Do you have a physical store in Bengaluru where I can see the charms?",
+    "Is there a Loop Loot shop I can visit in person in Bangalore?",
+    "Can I get my name engraved on a charm?",
+    "Do you do custom name engraving on the pendant?",
+    "Can you engrave initials on the bracelet?"
+  ]
+}
