@@ -1,0 +1,70 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sahay Commerce Contract",
+    "version": "1.0.0",
+    "description": "The one endpoint a custom website exposes so Sahay's AI can read orders/products and perform actions. Every request is POSTed with X-Sahay-Timestamp and X-Sahay-Signature: sha256=HMAC_SHA256(secret_key, \"<timestamp>.<raw body>\"). Reject requests older than 5 minutes. Implement only the actions you support; answer {\"ok\": false, \"error\": \"not_supported\"} with HTTP 404 for the rest."
+  },
+  "paths": {
+    "/your-sahay-endpoint": {
+      "post": {
+        "summary": "Answer one Commerce Contract action",
+        "parameters": [
+          { "name": "X-Sahay-Timestamp", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "X-Sahay-Signature", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "X-Sahay-Action", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Request" } } } },
+        "responses": {
+          "200": { "description": "Done", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ok" } } } },
+          "401": { "description": "Bad signature" },
+          "404": { "description": "Action not supported", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Request": {
+        "type": "object",
+        "required": ["action", "params"],
+        "properties": {
+          "action": { "type": "string", "enum": ["ping", "getOrder", "findOrders", "searchProducts", "getProduct", "checkStock", "createReturn", "cancelOrder", "refundOrder", "updateAddress", "rescheduleDelivery", "createCoupon", "tagOrder"] },
+          "params": {
+            "oneOf": [
+              { "title": "ping", "type": "object" },
+              { "title": "getOrder", "type": "object", "required": ["orderRef"], "properties": { "orderRef": { "type": "string" } } },
+              { "title": "findOrders", "type": "object", "properties": { "phone": { "type": "string", "description": "E.164, e.g. +919876543210" }, "email": { "type": "string" }, "limit": { "type": "integer" } } },
+              { "title": "searchProducts", "type": "object", "required": ["query"], "properties": { "query": { "type": "string" }, "limit": { "type": "integer" } } },
+              { "title": "getProduct / checkStock", "type": "object", "required": ["sku"], "properties": { "sku": { "type": "string" } } },
+              { "title": "createReturn", "type": "object", "required": ["orderRef", "type"], "properties": { "orderRef": { "type": "string" }, "skus": { "type": "array", "items": { "type": "string" } }, "reason": { "type": "string" }, "type": { "type": "string", "enum": ["return", "exchange"] } } },
+              { "title": "cancelOrder", "type": "object", "required": ["orderRef"], "properties": { "orderRef": { "type": "string" }, "reason": { "type": "string" } } },
+              { "title": "refundOrder", "type": "object", "required": ["orderRef", "amount"], "properties": { "orderRef": { "type": "string" }, "amount": { "type": "number", "description": "rupees" }, "reason": { "type": "string" } } },
+              { "title": "updateAddress", "type": "object", "required": ["orderRef", "address"], "properties": { "orderRef": { "type": "string" }, "address": { "type": "object", "properties": { "address": { "type": "string" }, "pincode": { "type": "string" } } } } },
+              { "title": "rescheduleDelivery", "type": "object", "required": ["orderRef", "date"], "properties": { "orderRef": { "type": "string" }, "date": { "type": "string", "format": "date" } } },
+              { "title": "createCoupon", "type": "object", "required": ["value"], "properties": { "value": { "type": "number" }, "customerRef": { "type": "string" } } },
+              { "title": "tagOrder", "type": "object", "required": ["orderRef", "tag"], "properties": { "orderRef": { "type": "string" }, "tag": { "type": "string" } } }
+            ]
+          },
+          "request_id": { "type": "string" }
+        }
+      },
+      "Ok": { "type": "object", "required": ["ok"], "properties": { "ok": { "const": true }, "data": { "description": "Order | Order[] | Product | Product[] | {stock} | action result | {actions: string[]} for ping" } } },
+      "Error": { "type": "object", "properties": { "ok": { "const": false }, "error": { "type": "string" } } },
+      "Order": {
+        "type": "object",
+        "required": ["orderRef", "status"],
+        "properties": {
+          "orderRef": { "type": "string" }, "customerName": { "type": "string" }, "customerPhone": { "type": "string" }, "customerEmail": { "type": "string" },
+          "items": { "type": "array", "items": { "type": "object", "properties": { "sku": { "type": "string" }, "title": { "type": "string" }, "qty": { "type": "integer" }, "price": { "type": "number" } } } },
+          "total": { "type": "number" }, "paymentMethod": { "type": "string", "enum": ["cod", "prepaid"] },
+          "status": { "type": "string", "description": "processing | in_transit | delivered | cancelled" },
+          "courier": { "type": "string" }, "trackingNumber": { "type": "string" }, "trackingUrl": { "type": "string" },
+          "expectedDelivery": { "type": "string", "format": "date" }, "deliveredAt": { "type": "string", "format": "date-time" }, "placedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Product": { "type": "object", "required": ["sku", "title"], "properties": { "sku": { "type": "string" }, "title": { "type": "string" }, "price": { "type": "number" }, "stock": { "type": "integer" }, "category": { "type": "string" }, "description": { "type": "string" } } }
+    }
+  }
+}
