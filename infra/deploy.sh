@@ -4,6 +4,7 @@
 #   infra/deploy.sh                # build image, deploy service
 #   infra/deploy.sh --setup        # also run migrations + reseed demo tenants (Cloud Run Job)
 #   infra/deploy.sh --migrate      # apply schema changes + Agent Profiles, keep data
+#   infra/deploy.sh --schema       # apply schema changes only
 #
 # One-time resources (already created for project-422405a7-b76c-49df-b1c; see infra/bootstrap.sh).
 set -euo pipefail
@@ -22,7 +23,7 @@ ENVFILE="infra/cloud.env.yaml"
 for pair in WHATSAPP_VERIFY_TOKEN=sahay-wa-verify-token WHATSAPP_APP_SECRET=sahay-wa-app-secret \
             LIVEKIT_URL=sahay-livekit-url LIVEKIT_API_KEY=sahay-livekit-api-key LIVEKIT_API_SECRET=sahay-livekit-api-secret \
             LIVEKIT_SIP_TRUNK_ID=sahay-livekit-sip-trunk SARVAM_API_KEY=sahay-sarvam-api-key VOICE_PLATFORM_KEY=sahay-voice-platform-key \
-            BREVO_API_KEY=sahay-brevo-api-key EMAIL_WEBHOOK_TOKEN=sahay-email-webhook-token EMAIL_FROM=sahay-email-from; do
+            BREVO_API_KEY=sahay-brevo-api-key EMAIL_WEBHOOK_TOKEN=sahay-email-webhook-token EMAIL_FROM=sahay-email-from \n            INBOUND_EMAIL_DOMAIN=sahay-inbound-email-domain TELEGRAM_BOT_TOKEN=sahay-telegram-bot-token; do
   gcloud secrets describe "${pair#*=}" --project "$PROJECT" >/dev/null 2>&1 && SECRETS="$SECRETS,$pair:latest"
 done
 
@@ -33,6 +34,8 @@ SETUP_CMD=""
 [[ "${1:-}" == "--setup" ]] && SETUP_CMD="python -m app.db.migrate && python -m app.seed --reset"
 # --migrate: apply schema changes and (re)seed Agent Profiles on the existing tenants, keeping their data
 [[ "${1:-}" == "--migrate" ]] && SETUP_CMD="python -m app.db.migrate && python -m app.seed --agent-only"
+# --schema: only apply schema changes (never touches seeded data or settings edited on the live site)
+[[ "${1:-}" == "--schema" ]] && SETUP_CMD="python -m app.db.migrate"
 if [[ -n "$SETUP_CMD" ]]; then
   echo "▶ $SETUP_CMD"
   gcloud run jobs deploy sahay-setup --image "$IMG" --region "$REGION" --project "$PROJECT" --service-account "$SA" \
