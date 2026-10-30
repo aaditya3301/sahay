@@ -23,7 +23,8 @@ ENVFILE="infra/cloud.env.yaml"
 for pair in WHATSAPP_VERIFY_TOKEN=sahay-wa-verify-token WHATSAPP_APP_SECRET=sahay-wa-app-secret \
             LIVEKIT_URL=sahay-livekit-url LIVEKIT_API_KEY=sahay-livekit-api-key LIVEKIT_API_SECRET=sahay-livekit-api-secret \
             LIVEKIT_SIP_TRUNK_ID=sahay-livekit-sip-trunk SARVAM_API_KEY=sahay-sarvam-api-key VOICE_PLATFORM_KEY=sahay-voice-platform-key \
-            BREVO_API_KEY=sahay-brevo-api-key EMAIL_WEBHOOK_TOKEN=sahay-email-webhook-token EMAIL_FROM=sahay-email-from \n            INBOUND_EMAIL_DOMAIN=sahay-inbound-email-domain TELEGRAM_BOT_TOKEN=sahay-telegram-bot-token; do
+            BREVO_API_KEY=sahay-brevo-api-key EMAIL_WEBHOOK_TOKEN=sahay-email-webhook-token EMAIL_FROM=sahay-email-from \
+            INBOUND_EMAIL_DOMAIN=sahay-inbound-email-domain TELEGRAM_BOT_TOKEN=sahay-telegram-bot-token; do
   gcloud secrets describe "${pair#*=}" --project "$PROJECT" >/dev/null 2>&1 && SECRETS="$SECRETS,$pair:latest"
 done
 
