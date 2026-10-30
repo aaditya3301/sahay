@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUpRight, BarChart3, BookOpen, CheckSquare, ChevronDown, ChevronRight, FlaskConical, GraduationCap, Inbox, LogOut, Megaphone, Menu, Phone, Plug, Scale, Settings, Shield, Sparkles, Store, Target, Users, X } from 'lucide-react'
+import { ArrowUpRight, BarChart3, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, FlaskConical, GraduationCap, Inbox, LogOut, Megaphone, Menu, Phone, Plug, Scale, Settings, Shield, Sparkles, Store, Target, Users, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { api, auth } from '../lib/api'
@@ -12,6 +12,63 @@ const belongsTo = (pathname: string, to: string) => pathname === to || pathname.
 
 function Wordmark() {
   return <span className="dashboard-wordmark"><img src="/sahay-mark-light.svg" alt="" width="30" height="30" /><span>sahay<span>.</span></span></span>
+}
+
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+
+// A listbox instead of a native <select>, so the open list matches the dashboard (the OS one can't be styled).
+function WorkspaceSwitcher({ tenants, currentId, onSelect }: { tenants: { id: string; name: string }[]; currentId?: string; onSelect: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const root = useRef<HTMLDivElement>(null)
+  const listId = useId()
+  const current = tenants.find((t) => t.id === currentId)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const show = () => { setActive(Math.max(0, tenants.findIndex((t) => t.id === currentId))); setOpen(true) }
+  const choose = (i: number) => { setOpen(false); if (tenants[i]) onSelect(tenants[i].id) }
+  const onKey = (e: React.KeyboardEvent) => {
+    if (!open && ['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); show(); return }
+    if (!open) return
+    if (e.key === 'Escape' || e.key === 'Tab') setOpen(false)
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => (i + 1) % tenants.length) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => (i - 1 + tenants.length) % tenants.length) }
+    else if (e.key === 'Home') { e.preventDefault(); setActive(0) }
+    else if (e.key === 'End') { e.preventDefault(); setActive(tenants.length - 1) }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(active) }
+  }
+
+  return (
+    <div className="dashboard-workspace" ref={root}>
+      <button type="button" className="dashboard-workspace-trigger" aria-label={`Workspace: ${current?.name || 'none'}. Switch workspace`}
+        aria-haspopup="listbox" aria-expanded={open} aria-controls={listId} onClick={() => (open ? setOpen(false) : show())} onKeyDown={onKey}
+        aria-activedescendant={open ? `${listId}-${active}` : undefined}>
+        <Store size={16} aria-hidden="true" />
+        <span className="dashboard-workspace-name">{current?.name || 'Select workspace'}</span>
+        <ChevronDown size={14} aria-hidden="true" className={cx('dashboard-workspace-chevron', open && 'is-open')} />
+      </button>
+      {open && (
+        <ul id={listId} role="listbox" aria-label="Workspaces" className="dashboard-workspace-menu">
+          <li className="dashboard-workspace-menu-label" role="presentation">Switch workspace</li>
+          {tenants.map((t, i) => (
+            <li key={t.id} id={`${listId}-${i}`} role="option" aria-selected={t.id === currentId}
+              className={cx('dashboard-workspace-option', i === active && 'is-active', t.id === currentId && 'is-current')}
+              onMouseEnter={() => setActive(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(i)}>
+              <span className="dashboard-workspace-avatar" aria-hidden="true">{initials(t.name)}</span>
+              <span className="dashboard-workspace-option-name">{t.name}</span>
+              {t.id === currentId && <Check size={15} aria-hidden="true" className="dashboard-workspace-check" />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -92,13 +149,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <span className="dashboard-location-parent">{activeGroup?.label || 'Customer care'}</span><ChevronRight className="dashboard-location-divider" size={14} aria-hidden="true" />
         <span className="dashboard-location-current">{pageName}</span>
       </div>
-      <label className="dashboard-workspace">
-        <Store size={16} aria-hidden="true" />
-        <select aria-label="Switch workspace" value={current?.id || ''} onChange={(e) => { auth.setTenant(e.target.value); qc.clear(); nav('/inbox') }}>
-          {tenants.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <ChevronDown size={14} aria-hidden="true" />
-      </label>
+      <WorkspaceSwitcher tenants={tenants} currentId={current?.id}
+        onSelect={(id) => { if (id !== current?.id) { auth.setTenant(id); qc.clear(); nav('/inbox') } }} />
     </header>
     <main id="dashboard-content" tabIndex={-1} ref={main} className="dashboard-sheet scroll-thin"><div className="dashboard-canvas">{children}</div></main>
     <dialog ref={dialog} className="dashboard-navigation-dialog" aria-label="Navigation" onClose={() => menuButton.current?.focus()} onClick={(event) => { if (event.target === event.currentTarget) dialog.current?.close() }}>

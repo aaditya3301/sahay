@@ -101,9 +101,22 @@
 .dashboard-location-parent { color: var(--dashboard-muted); }
 .dashboard-location-divider { color: var(--dashboard-muted); flex: none; }
 .dashboard-location-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dashboard-ink); }
-.dashboard-workspace { display: flex; align-items: center; gap: 8px; max-width: 240px; min-width: 0; color: var(--dashboard-ink); padding-inline: 10px; border-radius: 10px; background: var(--dashboard-surface); }
-.dashboard-workspace > svg { flex: none; pointer-events: none; }
-.dashboard-workspace > select { min-width: 0; max-width: 200px; min-height: 36px; appearance: none; border: 0; background: transparent; color: var(--dashboard-ink); outline-offset: 0; font-size: 13px; padding: 4px 0; }
+.dashboard-workspace { position: relative; max-width: 240px; min-width: 0; }
+.dashboard-workspace-trigger { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: var(--dashboard-surface); color: var(--dashboard-ink); font-size: 13px; font-weight: 500; transition: background-color .15s, border-color .15s; }
+.dashboard-workspace-trigger:hover, .dashboard-workspace-trigger[aria-expanded="true"] { background: var(--dashboard-field); border-color: var(--dashboard-border); }
+.dashboard-workspace-trigger > svg { flex: none; color: var(--dashboard-muted); }
+.dashboard-workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-workspace-chevron { margin-left: 2px; transition: transform .15s; }
+.dashboard-workspace-chevron.is-open { transform: rotate(180deg); }
+.dashboard-workspace-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 220px; max-width: 280px; max-height: 320px; overflow-y: auto; margin: 0; padding: 6px; list-style: none; background: var(--dashboard-field); border: 1px solid var(--dashboard-border); border-radius: 12px; box-shadow: 0 12px 32px rgba(23, 57, 78, .14), 0 2px 6px rgba(23, 57, 78, .06); }
+.dashboard-workspace-menu-label { padding: 6px 10px 4px; color: var(--dashboard-muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.dashboard-workspace-option { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; color: var(--dashboard-ink); font-size: 13px; cursor: pointer; }
+.dashboard-workspace-option.is-active { background: var(--dashboard-active); }
+.dashboard-workspace-option.is-current { font-weight: 600; }
+.dashboard-workspace-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-workspace-avatar { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 7px; background: var(--dashboard-raised); color: var(--dashboard-blue); font-size: 11px; font-weight: 700; }
+.dashboard-workspace-option.is-current .dashboard-workspace-avatar { background: var(--dashboard-sidebar); color: var(--dashboard-sidebar-ink); }
+.dashboard-workspace-check { flex: none; color: var(--dashboard-blue); }
 .dashboard-sheet { min-width: 0; min-height: 0; overflow: auto; margin: 0 8px 8px 0; background: var(--dashboard-ground); border: 0; border-radius: 0; }
 .dashboard-canvas { width: 100%; max-width: 1440px; margin-inline: auto; padding: 32px; }
 .dashboard-sheet:focus { outline: none; }
@@ -284,9 +297,10 @@
   .dashboard-menu-button { display: grid; }
   .dashboard-location { gap: 6px; font-size: 13px; flex: 1; }
   .dashboard-location-parent, .dashboard-location-divider { display: none; }
-  .dashboard-workspace { gap: 6px; max-width: 48%; }
-  .dashboard-workspace > select { font-size: 12px; max-width: 150px; }
-  .dashboard-workspace > svg:first-child { display: none; }
+  .dashboard-workspace { max-width: 55%; }
+  .dashboard-workspace-trigger { gap: 6px; font-size: 12px; }
+  .dashboard-workspace-trigger > svg:first-child { display: none; }
+  .dashboard-workspace-menu { min-width: 200px; max-width: calc(100vw - 32px); }
   .dashboard-sheet { margin: 0; border: 0; border-radius: 0; }
   .dashboard-canvas { padding: 24px 20px; }
   .sahay-dashboard .sahay-page-title { font-size: 24px; }
