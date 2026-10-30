@@ -35,7 +35,9 @@ What we know about this caller (looked up before the call): {{caller_context}}
 
 Rules:
 - Speak {{language}}. One or two short sentences per turn. Repeat numbers back to confirm.
-- For anything about orders, stock, prices or changes, call the tools. Never promise what a tool didn't confirm.
+- Orders: first ask for the order ID and call verify_order (pass the mobile number they ordered with if it's a different phone).
+  Share details or change the order only if it matches; never say whether an order exists before that.
+- For stock, prices and changes, call the tools. Never promise what a tool didn't confirm.
 - The tools enforce the business's rules: if a tool says it needs approval or is denied, say so politely and offer the alternative.
 - Never read links aloud: use send_link_whatsapp and tell them to check WhatsApp.
 - If they ask for a person, are very upset, or it's legal/sensitive: use transfer_to_human.
@@ -92,15 +94,12 @@ async def call_for_interaction(tenant_id: str, interaction_id: str | None, phone
 def variables(started: dict, prof: dict, business: str) -> dict:
     """Flat agent variables for Sarvam (strings only)."""
     ctx = started.get("context") or {}
-    orders = ctx.get("orders") or []
-    o = orders[0] if orders else {}
     tickets = ctx.get("open_tickets") or []
     bits = []
     if ctx.get("name"):
         bits.append(f"Name {ctx['name']}{' (VIP)' if ctx.get('vip') else ''}.")
-    for x in orders[:2]:
-        bits.append(f"Order {x['order_ref']}: {', '.join(x['items'][:2])}, {x['status']}, {x['payment']}" + (f", ETA {x['eta']}" if x.get("eta") else "")
-                    + (f", courier {x['courier']} AWB {x['awb']}" if x.get("awb") else "") + ".")
+    if ctx.get("orders_on_file"):  # details only after verify_order
+        bits.append(f"{ctx['orders_on_file']} order(s) on this number: ask for the order ID and verify it before discussing any order.")
     for t in tickets[:2]:
         bits.append(f"Open ticket #{t['number']} ({t['intent']}): {t['summary']}.")
     if ctx.get("lead"):
@@ -109,8 +108,8 @@ def variables(started: dict, prof: dict, business: str) -> dict:
         "call_ref": started["call_id"], "business_name": business, "agent_name": prof.get("agent_name") or "Sahay",
         "persona": prof.get("persona") or "", "language": {"hi": "simple Hindi", "en": "Indian English"}.get(prof["voice"].get("language"), "Hinglish"),
         "greeting": started.get("greeting") or "", "customer_name": (ctx.get("name") or "").split(" ")[0],
-        "caller_context": " ".join(bits) or "New caller, nothing on file.", "last_order_ref": o.get("order_ref") or "",
-        "last_order_status": o.get("status") or "", "open_ticket": str(tickets[0]["number"]) if tickets else "",
+        "caller_context": " ".join(bits) or "New caller, nothing on file.", "last_order_ref": "",
+        "last_order_status": "", "open_ticket": str(tickets[0]["number"]) if tickets else "",
         "known_customer": "yes" if ctx.get("known_customer") else "no",
     }
 
@@ -142,6 +141,15 @@ def speakable(name: str, out: dict) -> str:
         return {"succeeded": "Done, it's completed.", "pending_approval": "I've sent it to the team for approval; they'll update you soon.",
                 "denied": "That isn't allowed under our policy." + (f" I can offer: {out['offer_instead']}." if out.get("offer_instead") else ""),
                 "failed": "That didn't go through; a teammate will follow up."}[out["status"]]
+    if "match" in out:  # verify_order
+        if not out["match"]:
+            return out.get("note") or "That order ID doesn't match."
+        o = out["order"]
+        return (f"Verified. Order {o['order_ref']}: {', '.join(i['title'] for i in o['line_items'][:2])}, {o['status']}"
+                + (f", expected {o['expected_delivery']}" if o.get("expected_delivery") else "")
+                + (f", delivered {o['delivered_at'][:10]}" if o.get("delivered_at") else "") + ".")
+    if "orders_on_file" in out:
+        return out.get("note") or ""
     if "orders" in out:
         if not out["orders"]:
             return out.get("note") or "I couldn't find orders for this number."

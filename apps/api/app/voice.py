@@ -31,6 +31,8 @@ VOICE_RULES = """Phone call rules:
 - Speak {language}. Match the caller if they switch language.
 - Before a tool call you may say a short filler like "ek second, check kar rahi hoon".
 - Repeat numbers back digit by digit to confirm (order numbers, phone numbers, amounts).
+- Orders: before sharing any order detail or changing an order, ask for the order ID and call verify_order (with the mobile number they
+  ordered with if they're calling from another phone). Continue only if it matches; never say whether an order exists before that.
 - Never read out links or long codes: use send_link_whatsapp and tell them to check WhatsApp.
 - If they ask for a person, are very upset, or it's a legal/sensitive matter, use transfer_to_human.
 - Let them interrupt; answer the latest thing they said.
@@ -68,13 +70,8 @@ async def _caller_context(db, customer: dict | None, phone: str | None, exclude_
         return ctx
     ctx["name"] = customer.get("display_name")
     ctx["vip"] = customer.get("vip")
-    if phone:
-        ctx["orders"] = [
-            {"order_ref": o["order_ref"], "items": [li["title"] for li in o["line_items"]], "total_inr": o["total_paise"] / 100,
-             "status": o["status"], "payment": o["payment_method"], "eta": str(o["expected_delivery"] or ""),
-             "courier": o["courier"], "awb": o["awb"], "delivered_at": str(o["delivered_at"] or "")}
-            for o in await db.all("SELECT * FROM commerce_orders WHERE customer_phone=:p ORDER BY placed_at DESC LIMIT 3", p=phone)
-        ]
+    if phone:  # only a count: order details are shared after the caller verifies the order id (tools.verify_order)
+        ctx["orders_on_file"] = await db.val("SELECT count(*) FROM commerce_orders WHERE customer_phone=:p", p=phone)
     ctx["open_tickets"] = [
         {"number": t["number"], "intent": t["intent"], "summary": t["summary"], "status": t["status"]}
         for t in await db.all("SELECT number, intent, summary, status FROM tickets WHERE customer_id=:c AND status NOT IN ('resolved','closed') "
@@ -139,8 +136,8 @@ def build_system(prof: dict, srow: dict, context: dict, purpose: str, goal_ctx: 
     return (f"{persona_block(prof, srow)} {srow['business_description']}\nBrand voice: {srow['brand_voice']}\n"
             f"Business hours: {prof['voice'].get('business_hours')}\n{goal}\n"
             f"What we already know about the caller (looked up before the call): {json.dumps(context, default=str)}\n"
-            "The caller's orders above were looked up seconds ago: answer status/ETA questions from them directly without calling a tool. "
-            "Use tools for anything not above (other orders, stock, price, actions). Policy rules are enforced by the tools; never promise what a tool didn't confirm.\n"
+            "orders_on_file is how many orders this number has placed; you don't have their details until the caller gives an order ID and "
+            "verify_order matches. Use tools for orders, stock, price and actions. Policy rules are enforced by the tools; never promise what a tool didn't confirm.\n"
             + VOICE_RULES.format(language=lang, ending=STREAM_REPLY.format(script="" if prof["voice"].get("language") == "en" else DEVANAGARI)
                                  if stream else JSON_REPLY))
 

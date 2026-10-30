@@ -123,6 +123,20 @@
 .store-order-id strong { font-size: 26px; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
 .store-order-id button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; padding: 6px 12px; font-size: 13px; }
 .store-placed .store-button { width: 100%; margin-top: 16px; }
+.store-order-list { display: grid; gap: 12px; margin-top: 8px; }
+.store-order-card { border: 1px solid color-mix(in srgb, var(--store-ink) 14%, transparent); border-radius: 16px; padding: 16px; display: grid; gap: 8px; }
+.store-order-card p { margin: 0; font-size: 14px; }
+.store-order-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.store-order-card-head strong { font-size: 18px; letter-spacing: 0.05em; }
+.store-order-card-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--store-muted); }
+.store-order-card .store-ask { justify-self: start; display: inline-flex; align-items: center; gap: 6px; }
+.store-order-status { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 10px; background: color-mix(in srgb, var(--store-accent) 14%, transparent); }
+.store-order-status--payment_pending { background: #fef0c7; color: #93370d; }
+.store-order-status--delivered { background: #dcfae6; color: #085d3a; }
+.store-order-status--cancelled { background: #fee4e2; color: #912018; }
+.store-order-find { display: grid; gap: 4px; margin-top: 24px; padding-top: 20px; border-top: 1px solid color-mix(in srgb, var(--store-ink) 12%, transparent); }
+.store-order-find h3 { margin: 0 0 8px; font-size: 16px; }
+.store-order-find .store-button { margin-top: 12px; width: 100%; }
 .store-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; min-height: 100svh; }
 @keyframes store-enter { from { opacity: .25; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes store-picture-in { from { opacity: .3; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }

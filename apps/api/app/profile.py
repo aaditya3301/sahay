@@ -159,11 +159,11 @@ def tools_for(skills: list[str], profile: dict, channel: str, verified: bool) ->
     for s in skills:
         names += SKILLS[s]["tools"]
     if any(SKILLS[s]["group"] == "support" for s in skills) or any(s in skills for s in ("product_finder",)):
-        names += ["list_customer_orders", "get_order"]
+        names += ["list_customer_orders", "get_order", "verify_order"]
     if channel != "webchat" or verified:
         names = [n for n in names if n != "request_verification"]
     if channel == "voice":
-        names += ["send_link_whatsapp", "transfer_to_human"]
+        names += ["verify_order", "send_link_whatsapp", "transfer_to_human"]
     names += [custom_tool_name(t) for t in profile["custom_tools"] if t.get("enabled", True)]
     return list(dict.fromkeys(names))
 

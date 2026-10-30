@@ -556,7 +556,7 @@ function TestCall() {
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="green">● On call</Badge>
-          {call.context?.name && <span className="text-xs text-slate-500">Agent knows: {call.context.name}{call.context.orders?.length ? ` · ${call.context.orders.length} orders` : ''}{call.context.open_tickets?.length ? ` · ${call.context.open_tickets.length} open tickets` : ''}</span>}
+          {call.context?.name && <span className="text-xs text-slate-500">Agent knows: {call.context.name}{call.context.orders_on_file ? ` · ${call.context.orders_on_file} orders (asks for the order ID)` : ''}{call.context.open_tickets?.length ? ` · ${call.context.open_tickets.length} open tickets` : ''}</span>}
           <div className="flex-1" />
           {SR && <select className="rounded border px-1.5 py-1 text-xs" value={lang} onChange={(e) => setLang(e.target.value as any)}><option value="en-IN">English / Hinglish</option><option value="hi-IN">हिन्दी</option></select>}
           {SR && <Button size="sm" variant={listening ? 'success' : 'secondary'} onClick={listen} disabled={busy}>{listening ? <><Mic className="h-3.5 w-3.5" />Listening…</> : <><MicOff className="h-3.5 w-3.5" />Tap to talk</>}</Button>}

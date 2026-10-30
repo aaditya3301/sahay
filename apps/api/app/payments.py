@@ -118,6 +118,11 @@ async def _mark_paid(db, order: dict, how: str) -> None:
                   "WHERE customer_phone=:p AND status='open'", p=order["customer_phone"])
     for li in order["line_items"]:
         await db.exec("UPDATE commerce_products SET stock=greatest(stock - :q, 0) WHERE sku=:s", q=li["qty"], s=li["sku"])
+    # the buyer becomes a customer (typed-in phone, so not verified), which calls and chats from that number find
+    from app.pipeline import InboundMessage, resolve_customer
+
+    await resolve_customer(db, InboundMessage(channel="web", from_phone=order["customer_phone"], from_name=order["customer_name"],
+                                              from_email=order.get("customer_email")))
     await audit(db, "customer", order["customer_name"], "order.paid", "order", order["order_ref"],
                 {"total_inr": order["total_paise"] / 100, "via": how, "gateway": "cashfree"})
 
@@ -142,11 +147,29 @@ async def confirm(tenant_id: str, order_ref: str, *, from_webhook: bool = False)
             async with tenant_session(tenant_id) as db:
                 await _mark_paid(db, order, how)
                 order = await db.one("SELECT * FROM commerce_orders WHERE order_ref=:r", r=ref)
-    paid = order["status"] != "payment_pending"
-    return {"order_id": order["order_ref"], "paid": paid, "status": order["status"], "demo": "demo_paid" in (order["tags"] or []),
-            "total_inr": order["total_paise"] / 100, "items": [{"title": li["title"], "qty": li["qty"]} for li in order["line_items"]],
+    return summary(order)
+
+
+def summary(order: dict) -> dict:
+    """What the shopper sees about their order on the storefront."""
+    return {"order_id": order["order_ref"], "paid": order["status"] != "payment_pending", "status": order["status"],
+            "demo": "demo_paid" in (order["tags"] or []), "total_inr": order["total_paise"] / 100,
+            "items": [{"title": li["title"], "qty": li["qty"]} for li in order["line_items"]],
             "expected_delivery": order["expected_delivery"].isoformat() if order.get("expected_delivery") else None,
+            "delivered_at": order["delivered_at"].isoformat() if order.get("delivered_at") else None,
+            "placed_at": order["placed_at"].isoformat() if order.get("placed_at") else None,
+            "shipment_status": order.get("shipment_status"), "courier": order.get("courier"),
             "customer_name": order["customer_name"], "phone": order["customer_phone"]}
+
+
+async def find_order(tenant_id: str, order_ref: str, phone: str) -> dict | None:
+    """Order lookup for "My orders": the order id and the mobile number used at checkout must both match."""
+    ref, ph = (order_ref or "").strip().lstrip("#").upper(), norm_phone(phone)
+    if not ref or not ph:
+        return None
+    async with tenant_session(tenant_id) as db:
+        order = await db.one("SELECT * FROM commerce_orders WHERE upper(order_ref)=:r AND customer_phone=:p", r=ref, p=ph)
+    return summary(order) if order else None
 
 
 def webhook_ok(raw: bytes, timestamp: str | None, signature: str | None) -> bool:

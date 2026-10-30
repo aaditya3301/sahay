@@ -102,8 +102,8 @@ function CallDetail({ id, onClose }: { id: string; onClose: () => void }) {
             ))}
             {!c.transcript?.length && <div className="text-center text-xs text-slate-400">No transcript.</div>}
           </div>
-          {c.context && (c.context.orders?.length || c.context.open_tickets?.length) ? (
-            <div className="text-xs text-slate-500">Known before hello: {c.context.orders?.length || 0} orders, {c.context.open_tickets?.length || 0} open tickets{c.context.lead ? `, lead (${c.context.lead.stage})` : ''}.</div>
+          {c.context && (c.context.orders_on_file || c.context.orders?.length || c.context.open_tickets?.length) ? (
+            <div className="text-xs text-slate-500">Known before hello: {c.context.orders_on_file ?? c.context.orders?.length ?? 0} orders (details after the caller verifies an order ID), {c.context.open_tickets?.length || 0} open tickets{c.context.lead ? `, lead (${c.context.lead.stage})` : ''}.</div>
           ) : null}
         </div>
       )}

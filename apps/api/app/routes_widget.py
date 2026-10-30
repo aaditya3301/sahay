@@ -481,6 +481,24 @@ async def widget_checkout_confirm(body: ConfirmBody, request: Request):
         raise HTTPException(404, str(e))
 
 
+class FindOrderBody(BaseModel):
+    key: str
+    order_id: str
+    phone: str
+
+
+@router.post("/v1/widget/orders/find")
+async def widget_find_order(body: FindOrderBody, request: Request):
+    """Storefront "My orders": both the order id and the checkout mobile number must match."""
+    from app import payments
+
+    limit(request, "order-find", 15)
+    order = await payments.find_order(await _site_tenant(body.key), body.order_id, body.phone)
+    if not order:
+        raise HTTPException(404, "No order matches that order ID and mobile number.")
+    return jsonable(order)
+
+
 @router.get("/u/{token}")
 async def unsubscribe(token: str):
     try:

@@ -63,6 +63,10 @@ TOOL_SPECS: dict[str, dict] = {
     "get_order": {"kind": "read", "description": "Details of one order of this customer, including shipment status and delivery date. "
                   "Orders placed and paid on the shop's website (ids like LL-7KQ3XD) open with the order id alone; ask for it.",
                   "parameters": _obj({"order_ref": S}, ["order_ref"])},
+    "verify_order": {"kind": "read", "description": "Check that an order ID the customer gives is theirs: it must match the number they are calling "
+                     "from, or the mobile number they say they ordered with (pass it as phone). On calls, do this before sharing any order "
+                     "details or changing an order, and only continue if match is true.",
+                     "parameters": _obj({"order_ref": S, "phone": S}, ["order_ref"])},
     "track_shipment": {"kind": "read", "description": "Courier, AWB, live shipment status and ETA for an order.",
                        "parameters": _obj({"order_ref": S}, ["order_ref"])},
     "check_stock": {"kind": "read", "description": "Stock available for a product SKU.", "parameters": _obj({"sku": S}, ["sku"])},
@@ -141,12 +145,29 @@ async def customer_identities(ctx: ToolContext) -> dict:
     return ctx.identities
 
 
+async def call_state(ctx: ToolContext) -> dict:
+    """Per-call memory on voice_calls.context: which order ids the caller has verified, and failed attempts."""
+    if not ctx.voice_call_id:
+        return {}
+    return (await ctx.db.val("SELECT context FROM voice_calls WHERE id=:id", id=ctx.voice_call_id)) or {}
+
+
+async def _save_call_state(ctx: ToolContext, **fields) -> None:
+    if ctx.voice_call_id:
+        await ctx.db.exec("UPDATE voice_calls SET context = context || :x WHERE id=:id", x=fields, id=ctx.voice_call_id)
+
+
+MAX_VERIFY_FAILURES = 3
+
+
 async def owned_order(ctx: ToolContext, order_ref: str) -> tuple[dict | None, bool]:
     """Returns (order, belongs_to_customer). Orders of other customers are never returned to the LLM."""
     shop = await ctx.shop()
     order = await shop.get_order(order_ref or "")
     if not order:
         return None, False
+    if ctx.voice_call_id:  # on a call the caller ID alone isn't enough: the caller must have verified this order id
+        return order, order["order_ref"].upper() in (await call_state(ctx)).get("verified_orders", [])
     ids = await customer_identities(ctx)
     belongs = (norm_phone(order.get("customer_phone")) in ids["phones"]) or (norm_email(order.get("customer_email")) in ids["emails"])
     return order, belongs
@@ -389,6 +410,10 @@ async def _call_tool(ctx: ToolContext, name: str, args: dict) -> dict:
                 "previous_tickets": [{"number": t["number"], "intent": t["intent"], "status": t["status"], "summary": t["summary"]} for t in tickets]}
     if name == "list_customer_orders":
         ids = await customer_identities(ctx)
+        if ctx.voice_call_id:
+            n = sum(len(await shop.find_orders(phone=p, limit=20)) for p in list(ids["phones"])[:2])
+            return {"orders_on_file": n, "note": "Don't read out orders on a call. Ask for the order ID (it's in their order confirmation) "
+                                                  "and call verify_order; after it matches, use get_order."}
         if (ctx.conversation or {}).get("channel") == "webchat" and not (ids["phones"] or ids["emails"]):
             return {"orders": [], "note": "This web visitor has not verified a phone yet. If they ask about an order, ask for the order id "
                                           "(website orders look like LL-7KQ3XD) and call get_order, or call request_verification."}
@@ -406,14 +431,41 @@ async def _call_tool(ctx: ToolContext, name: str, args: dict) -> dict:
     if name in ("get_order", "track_shipment"):
         order, belongs = await owned_order(ctx, args.get("order_ref", ""))
         # a website order's id is random (payments.REF_ALPHABET), so quoting it is proof enough to read it; actions still check ownership
-        if order and not belongs and "cashfree" in (order.get("tags") or []) and "-" in order["order_ref"]:
+        if order and not belongs and not ctx.voice_call_id and "cashfree" in (order.get("tags") or []) and "-" in order["order_ref"]:
             belongs = True
             order = {**order, "customer_phone": None, "customer_email": None, "note": "Opened with the order id the customer gave."}
         if not order or not belongs:
+            if ctx.voice_call_id:
+                return {"found": False, "note": "Not verified on this call. Ask for the order ID and call verify_order first; don't say whether the order exists."}
             return {"found": False, "note": "No order with that number for this customer. Ask them to re-check the number or the phone/email used."}
         if name == "track_shipment":
             return {k: order[k] for k in ("order_ref", "courier", "awb", "shipment_status", "expected_delivery", "delivered_at", "status")}
         return order
+    if name == "verify_order":
+        state = await call_state(ctx)
+        fails = int(state.get("verify_failures") or 0)
+        if fails >= MAX_VERIFY_FAILURES:
+            return {"match": False, "note": "Too many order IDs that didn't match on this call. Don't share order details; offer transfer_to_human or a callback."}
+        order = await shop.get_order(args.get("order_ref", ""))
+        ids = await customer_identities(ctx)
+        given = norm_phone(args.get("phone"))
+        phone = norm_phone(order.get("customer_phone")) if order else None
+        match = bool(phone) and (phone in ids["phones"] or phone == given)
+        if not match:
+            await _save_call_state(ctx, verify_failures=fails + 1)
+            left = MAX_VERIFY_FAILURES - fails - 1
+            return {"match": False, "attempts_left": left,
+                    "note": "That order ID doesn't match this caller. Don't say whether such an order exists. Ask them to re-check the ID "
+                            "or give the mobile number they ordered with." + ("" if left else " No attempts left on this call.")}
+        ref = order["order_ref"].upper()
+        via = "caller_id" if phone in ids["phones"] else "phone_given"
+        await _save_call_state(ctx, verified_orders=sorted(set(state.get("verified_orders", [])) | {ref}))
+        if not ctx.voice_call_id:  # chat: the matched phone counts for the rest of this turn
+            ids["phones"].add(phone)
+        await audit(ctx.db, "ai", "Sahay AI", "order.verified", "order", ref, {"via": via})
+        return {"match": True, "order": {k: order[k] for k in ("order_ref", "line_items", "total_inr", "payment_method", "status",
+                                                               "shipment_status", "courier", "expected_delivery", "delivered_at", "placed_at")},
+                "note": "Verified. You can now help with this order (status, changes) through the usual tools."}
     if name == "check_stock":
         return await shop.check_stock(args.get("sku", ""))
     if name == "search_products":
