@@ -17,6 +17,14 @@ SA="sahay-run@$PROJECT.iam.gserviceaccount.com"
 SQL="$PROJECT:$REGION:sahay-db"
 SECRETS="DB_PASSWORD=sahay-db-app-password:latest,DB_OWNER_PASSWORD=sahay-db-owner-password:latest,JWT_SECRET=sahay-jwt-secret:latest,CRON_SECRET=sahay-cron-secret:latest"
 ENVFILE="infra/cloud.env.yaml"
+# Channel credentials live in Secret Manager; --env-vars-file replaces every env var, so they must be re-attached here.
+# LIVEKIT_URL turns the voice worker on (see Dockerfile).
+for pair in WHATSAPP_VERIFY_TOKEN=sahay-wa-verify-token WHATSAPP_APP_SECRET=sahay-wa-app-secret \
+            LIVEKIT_URL=sahay-livekit-url LIVEKIT_API_KEY=sahay-livekit-api-key LIVEKIT_API_SECRET=sahay-livekit-api-secret \
+            LIVEKIT_SIP_TRUNK_ID=sahay-livekit-sip-trunk SARVAM_API_KEY=sahay-sarvam-api-key VOICE_PLATFORM_KEY=sahay-voice-platform-key \
+            BREVO_API_KEY=sahay-brevo-api-key EMAIL_WEBHOOK_TOKEN=sahay-email-webhook-token; do
+  gcloud secrets describe "${pair#*=}" --project "$PROJECT" >/dev/null 2>&1 && SECRETS="$SECRETS,$pair:latest"
+done
 
 echo "▶ building $IMG"
 gcloud builds submit --tag "$IMG" --project "$PROJECT" --region "$REGION" .
@@ -39,6 +47,6 @@ echo "▶ deploying service"
 # and CPU stays allocated so debounced replies and simulations finish after the response.
 gcloud run deploy sahay --image "$IMG" --region "$REGION" --project "$PROJECT" --service-account "$SA" \
   --set-cloudsql-instances "$SQL" --env-vars-file "$ENVFILE" --set-secrets "$SECRETS" \
-  --memory 1Gi --cpu 1 --min-instances 1 --max-instances 1 --no-cpu-throttling --cpu-boost --concurrency 80 --timeout 900 \
+  --memory 2Gi --cpu 1 --min-instances 1 --max-instances 1 --no-cpu-throttling --cpu-boost --concurrency 80 --timeout 900 \
   --allow-unauthenticated
 gcloud run services describe sahay --region "$REGION" --project "$PROJECT" --format "value(status.url)"
