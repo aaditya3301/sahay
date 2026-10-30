@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, ExternalLink, Eye, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import ChannelConnections from '../components/ChannelConnections'
 import { Badge, Button, Card, cx, Empty, Field, inputCls, PageHeader, Spinner, Tabs } from '../components/ui'
 import { api } from '../lib/api'
 import { ago, humanize } from '../lib/format'
@@ -11,7 +13,7 @@ const statusTone = (s: string) => ({ processed: 'green', delivered: 'green', ign
 
 function Code({ children }: { children: string }) {
   return (
-    <div className="relative">
+    <div className="setup-code relative">
       <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-10 text-[11px] leading-relaxed text-slate-100 scroll-thin">{children}</pre>
       <button title="Copy" onClick={() => copy(children)} className="absolute right-2 top-2 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"><Copy className="h-3.5 w-3.5" /></button>
     </div>
@@ -19,36 +21,47 @@ function Code({ children }: { children: string }) {
 }
 
 export default function Integrations() {
+  const [view, setView] = useState('connect')
+  const { data } = useQuery({ queryKey: ['settings'], queryFn: () => api('/v1/settings') })
   return (
     <>
-      <PageHeader title="Integrations & developers" subtitle="Tickets and conversations live in Sahay. Orders, products and customers stay on your store; connectors join the two."
-        actions={<div className="flex gap-2">
-          <a href="/docs" target="_blank"><Button variant="secondary"><ExternalLink className="h-4 w-4" />Developer docs</Button></a>
-          <a href="/api-docs" target="_blank"><Button variant="secondary">API reference</Button></a>
-        </div>} />
-      <div className="space-y-4">
-        <Health />
-        <div className="grid gap-4 lg:grid-cols-2">
+      <PageHeader title="Integrations" subtitle="Start with your store, then choose how customers reach you." />
+      <Tabs value={view} onChange={setView} tabs={[{ id: 'connect', label: 'Set up connections' }, { id: 'health', label: 'Connection status' }, { id: 'developer', label: 'Developer tools' }]} />
+      <section hidden={view !== 'connect'} className="setup-tab-content" aria-label="Set up connections">
+        <div className="integrations-connect-layout">
           <Store />
-          <Keys />
+          {data ? <ChannelConnections integrations={data.integrations} showOtherChannels /> : <Spinner />}
         </div>
-        <Events />
-        <Webhooks />
-      </div>
+      </section>
+      <section hidden={view !== 'health'} className="setup-tab-content" aria-label="Connection status"><Health onConnect={() => setView('connect')} /></section>
+      <section hidden={view !== 'developer'} className="setup-tab-content" aria-label="Developer tools">
+        <p className="setup-intro">For custom websites and the person helping you connect them. Standard store setup is in Set up connections.</p>
+        <div className="setup-resource-links"><a href="/docs" target="_blank" rel="noreferrer"><ExternalLink size={15} />Developer guide</a><a href="/api-docs" target="_blank" rel="noreferrer">API reference →</a></div>
+        <div className="setup-developer-sections">
+          <details className="connection-disclosure"><summary>Website and secret keys</summary><div><Keys /></div></details>
+          <details className="connection-disclosure"><summary>Order and product updates</summary><div><Events /></div></details>
+          <details className="connection-disclosure"><summary>Send updates to your other systems</summary><div><Webhooks /></div></details>
+        </div>
+      </section>
     </>
   )
 }
 
-function Health() {
+function Health({ onConnect }: { onConnect: () => void }) {
   const { data, isLoading, refetch, isFetching } = useQuery({ queryKey: ['integration-health'], queryFn: () => api('/v1/integrations/health') })
   return (
-    <Card title="Integration health" action={<Button size="sm" variant="secondary" onClick={() => refetch()} loading={isFetching}><RefreshCw className="h-3.5 w-3.5" />Refresh</Button>}>
+    <Card title="Your connections" action={<Button size="sm" variant="secondary" onClick={() => refetch()} loading={isFetching}><RefreshCw className="h-3.5 w-3.5" />Refresh</Button>}>
       {isLoading ? <Spinner /> : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="connection-health-list">
           {(data?.checks || []).map((c: any) => (
-            <div key={c.key} className="rounded-lg border border-slate-100 p-2.5">
-              <div className="flex items-center gap-2 text-sm font-medium"><span className={cx('h-2.5 w-2.5 rounded-full', dot(c.status))} />{c.name}</div>
-              <div className="mt-1 text-xs text-slate-500">{c.detail}</div>
+            <div key={c.key} className="connection-health-row">
+              <span className={cx('connection-health-dot', dot(c.status))} aria-hidden="true" />
+              <div><strong>{({ store: 'Your store', widget: 'Website chat', events: 'Order and product updates', webhooks: 'Updates to other systems', voice: 'Phone calls', scheduler: 'Automations' } as Record<string, string>)[c.key] || c.name}</strong>
+                <details><summary>Connection details</summary><p>{c.detail}</p></details>
+              </div>
+              <Badge tone={c.status === 'red' ? 'red' : c.status === 'green' ? 'green' : 'slate'}>{c.status === 'red' ? 'Needs attention' : c.status === 'green' ? (c.detail.includes('demo store') ? 'Demo mode' : 'Ready') : ['events', 'webhooks'].includes(c.key) ? 'Optional' : c.key === 'scheduler' ? 'Not run yet' : c.key === 'widget' ? 'No messages yet' : 'Not connected'}</Badge>
+              {['store', 'whatsapp', 'email'].includes(c.key) && <Button size="sm" variant="ghost" onClick={onConnect}>Manage</Button>}
+              {['widget', 'voice'].includes(c.key) && <Link className="setup-text-link" to={`/studio?tab=${c.key === 'widget' ? 'widget' : 'voice'}`}>Set up →</Link>}
             </div>
           ))}
         </div>
@@ -81,47 +94,46 @@ function Store() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['integration-health'] }) },
   })
   const input = (k: string, placeholder: string, secret = false) => (
-    <input className={inputCls} type={secret ? 'password' : 'text'} placeholder={placeholder} value={f[k] === '••••' ? '' : f[k] || ''}
+    <input name={`store-${k}`} autoComplete={secret ? 'new-password' : 'off'} className={inputCls} type={secret ? 'password' : 'text'} placeholder={placeholder} value={f[k] === '••••' ? '' : f[k] || ''}
       onChange={(e) => setF({ ...f, [k]: e.target.value })} />
   )
   return (
-    <Card title="Connect your store" action={<Badge tone="green">active: {PROVIDERS.find((p) => p.id === active)?.label}</Badge>}>
-      <Tabs value={tab || active} onChange={setTab} tabs={PROVIDERS.map((p) => ({ id: p.id, label: p.label }))} />
+    <Card title="Connect your store" action={<Badge tone={active === 'mock' ? 'slate' : 'blue'}>Using {PROVIDERS.find((p) => p.id === active)?.label}</Badge>}>
+      {!data ? <Spinner /> : <>
+      <p className="setup-intro">Let Sahay look up your products and customer orders.</p>
+      <Field label="Where is your store?"><select className={inputCls} value={tab || active} onChange={(e) => setTab(e.target.value)}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
       <div className="mt-3 space-y-3 text-sm">
-        {tab === 'mock' && <p className="text-slate-600">The demo store lives inside Sahay (seeded orders and products). Use it as a sandbox to try everything before connecting a real store.</p>}
+        {tab === 'mock' && <p className="text-slate-600">Explore Sahay without connecting a live store. Choose your store platform above when you’re ready.</p>}
         {tab === 'shopify' && (
           <>
-            <p className="text-slate-600">Orders, products and abandoned checkouts come from Shopify's Admin API. Create a custom app with orders + products scopes and paste its token.</p>
-            <div className="grid grid-cols-2 gap-2">{input('shop_domain', 'yourstore.myshopify.com')}{input('access_token', current.access_token ? '•••• saved' : 'Admin API token', true)}</div>
+            <ol className="connection-steps"><li>Have your store domain and Shopify Admin API token ready. The token needs access to orders and products.</li><li>Enter both below, then save the connection.</li></ol>
+            <p className="setup-help">Need help finding these? Ask the person who manages your Shopify store.</p>
+            <div className="setup-fields"><Field label="Shopify store domain" hint="Use the address ending in .myshopify.com.">{input('shop_domain', 'yourstore.myshopify.com')}</Field><Field label="Admin API access token" hint={current.access_token ? 'A token is saved. Leave blank to keep it.' : undefined}>{input('access_token', current.access_token ? 'Saved token' : 'Paste your token', true)}</Field></div>
           </>
         )}
         {tab === 'woocommerce' && (
           <>
-            <p className="text-slate-600">WooCommerce → Settings → Advanced → REST API → add a key with read/write access.</p>
-            <div className="grid gap-2">{input('site_url', 'https://yourstore.in')}
-              <div className="grid grid-cols-2 gap-2">{input('consumer_key', current.consumer_key ? '•••• saved' : 'Consumer key (ck_…)', true)}{input('consumer_secret', current.consumer_secret ? '•••• saved' : 'Consumer secret (cs_…)', true)}</div></div>
+            <ol className="connection-steps"><li>In WooCommerce, open Settings → Advanced → REST API.</li><li>Create a key with read/write access, then enter the details below.</li></ol>
+            <div className="setup-fields"><Field label="Store website address">{input('site_url', 'https://yourstore.in')}</Field><Field label="Consumer key">{input('consumer_key', current.consumer_key ? 'Saved key — leave blank to keep' : 'Starts with ck_', true)}</Field><Field label="Consumer secret">{input('consumer_secret', current.consumer_secret ? 'Saved secret — leave blank to keep' : 'Starts with cs_', true)}</Field></div>
           </>
         )}
         {tab === 'custom' && (
           <>
-            <p className="text-slate-600">Your own website connects in levels. Start in 5 minutes, add more when you're ready:</p>
-            <ol className="space-y-1.5 text-xs text-slate-600">
-              <li><b>1 · Snippet (5 min):</b> paste the widget script or <code>npm i @sahay/widget</code>. The AI answers FAQs, captures leads and opens tickets.</li>
-              <li><b>2 · Identify + events (~1 hour):</b> sign logged-in customers and send order/product events from your server. The AI knows who's chatting and gives live order status.</li>
-              <li><b>3 · Actions (~half a day):</b> add one endpoint with our SDK (getOrder, checkStock, createReturn, …). The AI can do exchanges, returns and cancellations, still under your rules.</li>
-            </ol>
-            <Field label="Your actions endpoint (level 3, optional)" hint="Every request is signed with your secret key and timestamped. Leave empty for levels 1–2.">
+            <p className="text-slate-600">Start by adding website chat. Your developer can connect live order updates and order actions later.</p>
+            <Link className="setup-text-link" to="/studio?tab=widget">Set up website chat →</Link>
+            <details className="dashboard-disclosure"><summary>Advanced: connect order actions</summary><div className="space-y-3"><Field label="Order actions address (optional)" hint="Your developer supplies this address. Leave blank to start with chat and order updates.">
               {input('endpoint_url', 'https://yoursite.in/sahay')}
             </Field>
-            <a href="/docs#levels" target="_blank" className="text-xs font-medium text-brand-700 underline">How to set this up (with Node, Python and PHP examples) →</a>
+            <a href="/docs#levels" target="_blank" className="setup-text-link">Setup instructions for your developer →</a></div></details>
           </>
         )}
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => save.mutate()} loading={save.isPending}>{tab === active || !PROVIDERS.find((p) => p.id === tab) ? 'Save' : `Use ${PROVIDERS.find((p) => p.id === tab)?.label}`}</Button>
-          {save.isSuccess && <span className="text-xs text-emerald-700">Saved. Credentials are stored encrypted.</span>}
+          <Button onClick={() => save.mutate()} loading={save.isPending}>Save connection</Button>
+          {save.isSuccess && <span role="status" className="text-xs text-emerald-700">Connection details saved.</span>}
           {save.isError && <span className="text-xs text-red-600">{(save.error as Error).message}</span>}
         </div>
       </div>
+      </>}
     </Card>
   )
 }
