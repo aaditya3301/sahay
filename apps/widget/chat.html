@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat</title>
+<style>
+  :root { --c: #4f46e5; }
+  * { box-sizing: border-box; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  html, body { margin: 0; height: 100%; background: #fff; color: #0f172a; }
+  .app { display: flex; flex-direction: column; height: 100%; }
+  .full .app { max-width: 720px; margin: 0 auto; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; }
+  .hd { background: var(--c); color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
+  .hd .av { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.22); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .hd b { display: block; font-size: 15px; } .hd span { font-size: 12px; opacity: .88; }
+  .hd .x { margin-left: auto; background: transparent; border: 0; color: #fff; font-size: 20px; cursor: pointer; opacity: .85; }
+  .body { flex: 1; overflow-y: auto; padding: 14px 12px; background: #f8fafc; display: flex; flex-direction: column; gap: 8px; }
+  .m { max-width: 84%; padding: 9px 12px; border-radius: 14px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+  .in { align-self: flex-end; background: var(--c); color: #fff; border-bottom-right-radius: 4px; }
+  .out { align-self: flex-start; background: #fff; border: 1px solid #e2e8f0; border-bottom-left-radius: 4px; }
+  .out a { color: var(--c); }
+  .who { font-size: 10.5px; color: #64748b; margin-bottom: 3px; }
+  .cards { align-self: flex-start; display: flex; gap: 8px; overflow-x: auto; max-width: 100%; padding-bottom: 2px; }
+  .card { min-width: 150px; max-width: 170px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; font-size: 13px; }
+  .card .t { font-weight: 600; line-height: 1.3; min-height: 34px; }
+  .card .p { color: var(--c); font-weight: 700; margin-top: 4px; }
+  .card .s { font-size: 11px; color: #16a34a; } .card .s.no { color: #dc2626; }
+  .card button { margin-top: 8px; width: 100%; border: 1px solid var(--c); color: var(--c); background: #fff; border-radius: 8px; padding: 5px; font-size: 12px; cursor: pointer; }
+  .verify { align-self: stretch; background: #fff; border: 1px dashed var(--c); border-radius: 12px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+  .verify input { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+  .verify button, .pri { background: var(--c); color: #fff; border: 0; border-radius: 8px; padding: 9px; font-weight: 600; cursor: pointer; }
+  .hint { font-size: 11.5px; color: #64748b; } .err { font-size: 12px; color: #dc2626; }
+  .chip { align-self: flex-start; font-size: 11.5px; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 999px; padding: 3px 9px; }
+  .typing { align-self: flex-start; color: #64748b; font-size: 12px; padding: 2px 6px; }
+  .typing i { display: inline-block; width: 6px; height: 6px; margin: 0 1px; border-radius: 50%; background: #94a3b8; animation: b 1s infinite; }
+  .typing i:nth-child(2) { animation-delay: .15s } .typing i:nth-child(3) { animation-delay: .3s }
+  @keyframes b { 0%, 80%, 100% { opacity: .3 } 40% { opacity: 1 } }
+  .ft { display: flex; gap: 6px; padding: 10px; border-top: 1px solid #e2e8f0; align-items: center; background: #fff; }
+  .ft input[type=text] { flex: 1; border: 1px solid #cbd5e1; border-radius: 22px; padding: 10px 14px; font-size: 14px; outline: none; }
+  .ft input[type=text]:focus { border-color: var(--c); }
+  .send { background: var(--c); color: #fff; border: 0; border-radius: 50%; width: 38px; height: 38px; cursor: pointer; font-size: 16px; }
+  .att { cursor: pointer; font-size: 19px; color: #64748b; padding: 0 4px; }
+  .ctx { font-size: 11px; color: #64748b; padding: 4px 12px 0; background: #fff; }
+  .pw { font-size: 10px; text-align: center; color: #94a3b8; padding: 2px 0 8px; background: #fff; }
+  .center { margin: auto; text-align: center; color: #64748b; font-size: 14px; padding: 24px; }
+  .mic { margin-left: auto; background: rgba(255,255,255,.2); border: 0; color: #fff; border-radius: 999px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  .mic + .x { margin-left: 4px; }
+  .vc { position: absolute; inset: 0; background: #fff; display: none; flex-direction: column; z-index: 5; }
+  .vc.on { display: flex; }
+  .vc .orb { width: 96px; height: 96px; border-radius: 50%; background: var(--c); margin: 28px auto 8px; opacity: .85; transition: transform .2s; }
+  .vc .orb.live { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.12) } }
+  .vc .st { text-align: center; font-size: 13px; color: #475569; }
+  .vc .lines { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+  .vc .lines .u { align-self: flex-end; color: #0f172a; background: #f1f5f9; padding: 6px 10px; border-radius: 10px; }
+  .vc .lines .a { align-self: flex-start; color: #0f172a; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 10px; }
+  .vc .end { margin: 10px 16px 16px; background: #dc2626; color: #fff; border: 0; border-radius: 10px; padding: 11px; font-weight: 600; cursor: pointer; }
+  .app { position: relative; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hd"><div class="av" id="av">S</div><div><b id="title">Chat</b><span id="sub">Replies in seconds · Hindi, Hinglish or English</span></div>
+    <button class="mic" id="mic" title="Talk to us" style="display:none">&#127908; Talk</button>
+    <button class="x" id="close" title="Close" aria-label="Close" style="display:none">&#10005;</button></div>
+  <div class="vc" id="vc"><div class="orb" id="orb"></div><div class="st" id="vst">Connecting…</div><div class="lines" id="vlines"></div>
+    <button class="end" id="vend">End call</button></div>
+  <div class="body" id="body"><div class="center">Connecting…</div></div>
+  <div class="ctx" id="ctx" style="display:none"></div>
+  <div class="ft" id="ft" style="display:none">
+    <label class="att" title="Attach a photo">&#128206;<input type="file" id="file" accept="image/*" style="display:none"></label>
+    <input type="text" id="input" placeholder="Type your message…" autocomplete="off">
+    <button class="send" id="send" aria-label="Send">&#10148;</button>
+  </div>
+  <div class="pw">AI assistant · powered by Sahay</div>
+</div>
+<script>
+(function () {
+  var path = location.pathname.split('/');
+  var mode = path[1] === 'r' ? 'reply_now' : 'widget';
+  var KEY = mode === 'widget' ? decodeURIComponent(path[2] || '') : null;
+  var REPLY = mode === 'reply_now' ? path.slice(2).join('/') : null;
+  var params = new URLSearchParams(location.search);
+  var embedded = window.parent !== window;
+  var $ = function (id) { return document.getElementById(id); };
+  var body = $('body'), input = $('input'), file = $('file');
+  var S = { session: null, cfg: null, context: {}, user: null, userHash: null, lastSig: '', pending: null, seen: {}, verifyOpen: false, started: false };
+  if (mode === 'reply_now' || !embedded) document.documentElement.classList.add('full');
+  if (embedded && mode === 'widget' && !params.get('playground')) $('close').style.display = 'block';
+  $('close').onclick = function () { parent.postMessage({ type: 'sahay:close' }, '*'); };
+
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function fmt(s) {
+    return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function emit(name, data) { if (embedded) parent.postMessage({ type: 'sahay:event', name: name, data: data }, '*'); }
+  function parentOrigin() {
+    var o = params.get('origin');
+    if (!o && document.referrer) { try { o = new URL(document.referrer).origin; } catch (e) {} }
+    return o || location.origin;
+  }
+
+  window.addEventListener('message', function (e) {
+    var d = e.data || {};
+    if (d.type === 'sahay:init') { S.user = d.user; S.userHash = d.userHash; S.context = d.context || {}; showCtx(); start(); }
+    else if (d.type === 'sahay:cart') { S.cart = d.cart; pushCart(); }
+    else if (d.type === 'sahay:context') { S.context = d.context || {}; showCtx(); }
+    else if (d.type === 'sahay:opened') { poll(); setTimeout(function () { input.focus(); }, 50); }
+  });
+  function showCtx() {
+    var t = S.context.product_title || (S.context.product && S.context.product.title);
+    $('ctx').style.display = t ? 'block' : 'none';
+    $('ctx').textContent = t ? 'Asking about: ' + t : '';
+  }
+
+  function pushCart() {
+    if (!S.session || !S.cart) return;
+    var c = S.cart;
+    api('/v1/widget/cart', { session: S.session, items: c.items || [], name: c.name, phone: c.phone, email: c.email, checkout_url: c.checkoutUrl })
+      .then(function (j) { emit('cart_saved', j); }).catch(function () {});
+  }
+
+  // Bot check: find a counter so sha256(challenge:counter) starts with `bits` zero bits (~0.2s for a person, expensive at bot scale).
+  function sha256(ascii) {
+    var K = sha256.k || (sha256.k = (function () { var k = [], n = 2, c = 0; while (c < 64) { var p = true; for (var i = 2; i * i <= n; i++) if (n % i === 0) { p = false; break; }
+      if (p) { k[c++] = (Math.pow(n, 1 / 3) * 4294967296) | 0; } n++; } return k; })());
+    var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var bytes = []; for (var i = 0; i < ascii.length; i++) bytes.push(ascii.charCodeAt(i) & 255);
+    var bitLen = bytes.length * 8; bytes.push(0x80); while (bytes.length % 64 !== 56) bytes.push(0);
+    for (i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bitLen >>> (i * 8)) & 255);
+    var w = new Array(64);
+    for (var o = 0; o < bytes.length; o += 64) {
+      for (i = 0; i < 16; i++) w[i] = (bytes[o + i * 4] << 24) | (bytes[o + i * 4 + 1] << 16) | (bytes[o + i * 4 + 2] << 8) | bytes[o + i * 4 + 3];
+      for (i = 16; i < 64; i++) { var a = w[i - 15], b = w[i - 2];
+        var s0 = ((a >>> 7) | (a << 25)) ^ ((a >>> 18) | (a << 14)) ^ (a >>> 3), s1 = ((b >>> 17) | (b << 15)) ^ ((b >>> 19) | (b << 13)) ^ (b >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0; }
+      var h0 = H[0], h1 = H[1], h2 = H[2], h3 = H[3], h4 = H[4], h5 = H[5], h6 = H[6], h7 = H[7];
+      for (i = 0; i < 64; i++) {
+        var S1 = ((h4 >>> 6) | (h4 << 26)) ^ ((h4 >>> 11) | (h4 << 21)) ^ ((h4 >>> 25) | (h4 << 7)), ch = (h4 & h5) ^ (~h4 & h6);
+        var t1 = (h7 + S1 + ch + K[i] + w[i]) | 0;
+        var S0 = ((h0 >>> 2) | (h0 << 30)) ^ ((h0 >>> 13) | (h0 << 19)) ^ ((h0 >>> 22) | (h0 << 10)), mj = (h0 & h1) ^ (h0 & h2) ^ (h1 & h2);
+        var t2 = (S0 + mj) | 0;
+        h7 = h6; h6 = h5; h5 = h4; h4 = (h3 + t1) | 0; h3 = h2; h2 = h1; h1 = h0; h0 = (t1 + t2) | 0; }
+      H[0] = (H[0] + h0) | 0; H[1] = (H[1] + h1) | 0; H[2] = (H[2] + h2) | 0; H[3] = (H[3] + h3) | 0;
+      H[4] = (H[4] + h4) | 0; H[5] = (H[5] + h5) | 0; H[6] = (H[6] + h6) | 0; H[7] = (H[7] + h7) | 0;
+    }
+    return H[0] >>> 0;  // only the first 32 bits are needed for the leading-zero check
+  }
+  function botCheck() {
+    if (REPLY) return Promise.resolve({});
+    return fetch('/v1/widget/challenge').then(function (r) { return r.json(); }).then(function (c) {
+      if (c.turnstile_site_key) return turnstile(c.turnstile_site_key);
+      var limit = Math.pow(2, 32 - c.bits), n = 0;
+      while (sha256(c.challenge + ':' + n) >= limit) n++;
+      return { pow_challenge: c.challenge, pow_counter: String(n) };
+    }).catch(function () { return {}; });
+  }
+  function turnstile(siteKey) {
+    return new Promise(function (resolve) {
+      var s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      s.onload = function () {
+        var box = el('div'); box.style.cssText = 'position:fixed;bottom:4px;left:4px;z-index:9'; document.body.appendChild(box);
+        window.turnstile.render(box, { sitekey: siteKey, size: 'compact', callback: function (t) { resolve({ turnstile_token: t }); box.remove(); } });
+      };
+      document.head.appendChild(s);
+    });
+  }
+
+  function start() {
+    if (S.started) return; S.started = true;
+    var vkey = 'sahay_v_' + (KEY || 'reply');
+    var visitor = store(vkey);
+    if (!visitor) { visitor = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36); store(vkey, visitor); }
+    botCheck().then(function (proof) { return fetch('/v1/widget/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({
+      key: KEY, reply_token: REPLY, visitor_id: visitor, parent_origin: parentOrigin(), user: S.user, user_hash: S.userHash }, proof)) }); })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.detail || 'Could not start chat'); return j; }); })
+      .then(function (j) {
+        S.session = j.session; S.cfg = j.config; S.verified = j.verified;
+        document.documentElement.style.setProperty('--c', j.config.brand_color || '#4f46e5');
+        $('title').textContent = j.config.name; document.title = j.config.name + ' · chat';
+        $('av').textContent = (j.config.agent_name || 'S').slice(0, 1).toUpperCase();
+        $('sub').textContent = (j.config.agent_name || 'Assistant') + ' · replies in seconds · Hindi, Hinglish or English';
+        $('ft').style.display = 'flex';
+        if (window.speechSynthesis && (window.SpeechRecognition || window.webkitSpeechRecognition)) $('mic').style.display = 'block';
+        render([]); poll(); setInterval(poll, 2000); pushCart();
+      })
+      .catch(function (err) { body.innerHTML = '<div class="center">' + esc(err.message) + '</div>'; });
+  }
+  if (mode === 'reply_now' || !embedded || params.get('playground')) start();
+  else { parent.postMessage({ type: 'sahay:ready' }, '*'); setTimeout(start, 1500); }
+
+  function greeting() {
+    var g = el('div', 'm out'); g.innerHTML = '<div class="who">' + esc(S.cfg.agent_name) + '</div>' + fmt(S.cfg.greeting); return g;
+  }
+  function render(msgs, typing) {
+    var atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+    body.innerHTML = ''; body.appendChild(greeting());
+    var lastVerify = -1;
+    msgs.forEach(function (m, i) { if (m.direction === 'out' && m.interactive && m.interactive.verify_phone) lastVerify = i; });
+    msgs.forEach(function (m, i) {
+      var div = el('div', 'm ' + (m.direction === 'in' ? 'in' : 'out'));
+      var html = m.direction === 'out' ? '<div class="who">' + (m.author_type === 'ai' ? '✨ ' + esc(S.cfg.agent_name) : esc(m.author_name || S.cfg.name + ' team')) + '</div>' : '';
+      (m.attachments || []).forEach(function (a) { if (a.kind === 'image' && m.direction === 'in') html += '<div class="hint" style="color:inherit">📷 photo sent</div>'; });
+      div.innerHTML = html + fmt(m.text || '');
+      body.appendChild(div);
+      var ui = m.direction === 'out' ? (m.interactive || {}) : {};
+      if (ui.products && ui.products.length) body.appendChild(cards(ui.products));
+      if (ui.lead_captured) {
+        body.appendChild(el('div', 'chip', '✓ Your details are with the team'));
+        if (!S.seen[m.id]) { S.seen[m.id] = 1; emit('lead_captured', { message_id: m.id }); }
+      }
+      if (ui.verify_phone && i === lastVerify && !S.verified) body.appendChild(verifyForm());
+    });
+    if (typing) body.appendChild(el('div', 'typing', '<i></i><i></i><i></i>'));
+    if (atBottom || !S.rendered) body.scrollTop = 1e9;
+    S.rendered = true;
+  }
+  function cards(items) {
+    var row = el('div', 'cards');
+    items.forEach(function (p) {
+      var c = el('div', 'card', '<div class="t">' + esc(p.title) + '</div><div class="p">₹' + Number(p.price_inr).toLocaleString('en-IN') + '</div>' +
+        '<div class="s' + (p.in_stock ? '' : ' no') + '">' + (p.in_stock ? 'In stock' : 'Out of stock') + '</div>');
+      var b = el('button', null, 'Ask about this');
+      b.onclick = function () { S.context.product_sku = p.sku; S.context.product_title = p.title; showCtx(); send('Tell me more about ' + p.title); };
+      c.appendChild(b); row.appendChild(c);
+    });
+    return row;
+  }
+  function verifyForm() {
+    var box = el('div', 'verify', '<b>Verify your phone to see your orders</b><span class="hint">Use the number you ordered with. We\'ll send a 6-digit code.</span>');
+    var ph = el('input'); ph.placeholder = '10-digit mobile number'; ph.inputMode = 'tel';
+    var btn = el('button', null, 'Send code'); var msg = el('div', 'err');
+    box.appendChild(ph); box.appendChild(btn); box.appendChild(msg);
+    btn.onclick = function () {
+      msg.textContent = '';
+      api('/v1/widget/otp/start', { session: S.session, phone: ph.value }).then(function (j) {
+        box.innerHTML = '<b>Enter the code</b><span class="hint">' + (j.demo_code ? 'Demo mode (WhatsApp not connected yet): your code is <b>' + j.demo_code + '</b>' : 'We sent it on WhatsApp.') + '</span>';
+        var code = el('input'); code.placeholder = '6-digit code'; code.inputMode = 'numeric';
+        var go = el('button', null, 'Verify'); var err = el('div', 'err');
+        box.appendChild(code); box.appendChild(go); box.appendChild(err);
+        go.onclick = function () {
+          api('/v1/widget/otp/verify', { session: S.session, phone: ph.value, code: code.value }).then(function (v) {
+            S.session = v.session; S.verified = true; S.lastSig = '';
+            send('I have verified my phone number.');
+          }).catch(function (e) { err.textContent = e.message; });
+        };
+      }).catch(function (e) { msg.textContent = e.message; });
+    };
+    return box;
+  }
+  function api(url, data) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.detail || 'Something went wrong'); return j; }); });
+  }
+  function poll() {
+    if (!S.session) return;
+    fetch('/v1/widget/poll?session=' + encodeURIComponent(S.session)).then(function (r) { return r.json(); }).then(function (d) {
+      var msgs = d.messages || [];
+      var sig = msgs.length + '|' + (d.typing ? 't' : '') + '|' + (S.verified ? 'v' : '');
+      if (sig === S.lastSig) return;
+      var newOut = msgs.length && msgs[msgs.length - 1].direction === 'out' && S.lastSig && msgs.length > (+S.lastSig.split('|')[0] || 0);
+      S.lastSig = sig; render(msgs, d.typing);
+      if (newOut) emit('message', { text: msgs[msgs.length - 1].text });
+    }).catch(function () {});
+  }
+  function send(text) {
+    if (!S.session || (!text.trim() && !S.pending)) return;
+    var fd = new FormData();
+    fd.append('session', S.session); fd.append('text', text);
+    fd.append('context', JSON.stringify(Object.assign({ source: mode }, S.context)));
+    if (S.pending) fd.append('file', S.pending);
+    var bubble = el('div', 'm in', esc(text || '📷 photo')); body.appendChild(bubble);
+    body.appendChild(el('div', 'typing', '<i></i><i></i><i></i>')); body.scrollTop = 1e9;
+    S.pending = null; file.value = ''; input.placeholder = 'Type your message…';
+    fetch('/v1/widget/send', { method: 'POST', body: fd }).then(function (r) {
+      if (r.status === 429) r.json().then(function (j) { bubble.insertAdjacentHTML('afterend', '<div class="err">' + esc(j.detail || 'Slow down a little and try again.') + '</div>'); });
+      setTimeout(poll, 600);
+    });
+  }
+  // ---- "Talk to us": a voice call in the browser (same agent, tools and rules; no phone line needed) ----
+  var V = { id: null, rec: null, live: false, lang: 'hi-IN' };
+  function vstate(t, live) { $('vst').textContent = t; $('orb').classList.toggle('live', !!live); }
+  function vline(cls, t) { var d = el('div', cls, esc(t)); $('vlines').appendChild(d); $('vlines').scrollTop = 1e9; }
+  function speak(text, then) {
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = V.lang; var vs = speechSynthesis.getVoices().filter(function (v) { return v.lang === V.lang; }); if (vs.length) u.voice = vs[0];
+    u.onend = function () { if (V.live && then) then(); };
+    vstate('Speaking…', true); speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+  function listen() {
+    if (!V.live) return;
+    var R = window.SpeechRecognition || window.webkitSpeechRecognition;
+    V.rec = new R(); V.rec.lang = V.lang === 'hi-IN' ? 'en-IN' : V.lang; V.rec.interimResults = false; V.rec.maxAlternatives = 1;
+    var heard = false;
+    V.rec.onresult = function (e) { heard = true; var t = e.results[0][0].transcript; vline('u', t); turn(t); };
+    V.rec.onend = function () { if (V.live && !heard) listen(); };
+    V.rec.onerror = function (e) { if (e.error === 'not-allowed') { vstate('Microphone blocked. Allow it and try again.'); V.live = false; } };
+    vstate('Listening…', true); V.rec.start();
+  }
+  function turn(text) {
+    vstate('Thinking…', false);
+    var slow = setTimeout(function () { speak(V.lang === 'hi-IN' ? 'Ek second, check kar rahi hoon.' : 'One second, let me check.'); }, 1400);
+    api('/v1/widget/voice/turn', { session: S.session, call_id: V.id, text: text }).then(function (r) {
+      clearTimeout(slow); vline('a', r.say);
+      speak(r.say, r.end_call ? endCall : listen);
+    }).catch(function (e) { clearTimeout(slow); vstate(e.message); });
+  }
+  function endCall() {
+    V.live = false; try { V.rec && V.rec.abort(); } catch (e) {} speechSynthesis.cancel();
+    if (V.id) api('/v1/widget/voice/end', { session: S.session, call_id: V.id }).catch(function () {});
+    V.id = null; $('vc').classList.remove('on'); S.lastSig = ''; poll();
+  }
+  $('mic').onclick = function () {
+    $('vlines').innerHTML = ''; $('vc').classList.add('on'); vstate('Connecting…'); V.live = true;
+    api('/v1/widget/voice/start', { session: S.session }).then(function (r) {
+      V.id = r.call_id; V.lang = r.lang || 'hi-IN'; vline('a', r.greeting); speak(r.greeting, listen);
+    }).catch(function (e) { vstate(e.message); V.live = false; });
+  };
+  $('vend').onclick = endCall;
+
+  $('send').onclick = function () { var t = input.value; input.value = ''; send(t); };
+  input.onkeydown = function (e) { if (e.key === 'Enter') { var t = input.value; input.value = ''; send(t); } };
+  file.onchange = function () { S.pending = file.files[0]; if (S.pending) input.placeholder = '📷 ' + S.pending.name + ' — add a message'; };
+})();
+</script>
+</body>
+</html>
