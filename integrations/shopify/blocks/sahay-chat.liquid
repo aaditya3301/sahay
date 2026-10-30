@@ -1,0 +1,32 @@
+{% comment %}
+  Sahay chat: Shopify theme app extension (app embed block).
+  Theme editor → App embeds → Sahay chat → paste your site key (and secret key to sign logged-in customers).
+  The secret is only used server-side by Liquid's hmac_sha256 filter; the page gets the hash, never the key.
+{% endcomment %}
+<script>
+  window.Sahay = window.Sahay || function () { (window.Sahay.q = window.Sahay.q || []).push(arguments) };
+  Sahay('init', {
+    siteKey: {{ block.settings.site_key | json }},
+    {% if customer and block.settings.secret_key != blank %}
+      user: { email: {{ customer.email | json }}, name: {{ customer.name | json }} },
+      userHash: {{ customer.email | downcase | hmac_sha256: block.settings.secret_key | json }},
+    {% endif %}
+    context: {
+      {% if product %}productSku: {{ product.selected_or_first_available_variant.sku | json }}, productTitle: {{ product.title | json }},{% endif %}
+      cart: { items: {{ cart.item_count }}, total: {{ cart.total_price | divided_by: 100.0 }} }
+    }
+  });
+</script>
+<script src="{{ block.settings.host }}/widget.js" data-manual async></script>
+
+{% schema %}
+{
+  "name": "Sahay chat",
+  "target": "body",
+  "settings": [
+    { "type": "text", "id": "site_key", "label": "Site key (pk_...)" },
+    { "type": "text", "id": "secret_key", "label": "Secret key (sk_...), optional: lets the chat show logged-in customers their orders" },
+    { "type": "text", "id": "host", "label": "Sahay host", "default": "https://sahay-536440059442.asia-south1.run.app" }
+  ]
+}
+{% endschema %}
