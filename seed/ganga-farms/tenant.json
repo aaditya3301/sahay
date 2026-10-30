@@ -1,0 +1,93 @@
+{
+  "name": "Ganga Farms",
+  "slug": "ganga-farms",
+  "settings": {
+    "business_description": "Ganga Farms is a farm-to-home brand from Uttarakhand selling A2 desi cow ghee, raw honey, cold-pressed oils, jaggery, atta and pickles. Most products are perishable food items. Customers are families across India, many prefer Hindi.",
+    "brand_voice": "Respectful, warm and trustworthy, like a family farm. Uses 'ji', speaks simple Hindi or Hinglish when the customer does. Calm and reassuring about food quality.",
+    "website_url": "https://gangafarms.in",
+    "languages": [
+      "hi",
+      "hinglish",
+      "en"
+    ],
+    "default_autonomy": "auto",
+    "autonomy": {
+      "refund_request": "auto",
+      "spam": "human"
+    },
+    "owner_phone": "+919000000002",
+    "brand_color": "#2b8a3e",
+    "widget_greeting": "Namaste 🙏 Ganga Farms mein aapka swagat hai. Hum aapki kaise madad kar sakte hain?",
+    "debounce_ms": 2500,
+    "sla_minutes": 90
+  },
+  "policy_text": "Spoiled, leaked or damaged products: replace automatically if reported within 2 days of delivery with a photo showing the problem and the item value is up to ₹1500.\nRefunds up to ₹300 can be done automatically; anything more needs my approval.\nPerishable products can never be returned.\nCancellation is automatic only before shipping.\nCoupons up to ₹100 automatically for unhappy customers (frustration 60 or more).",
+  "users": [
+    {
+      "email": "owner@gangafarms.demo",
+      "name": "Rakesh (Ganga Farms)",
+      "role": "owner"
+    }
+  ],
+  "commerce": {
+    "provider": "mock"
+  },
+  "random_orders": {
+    "count": 50,
+    "days_back": 30,
+    "couriers": [
+      "Xpressbees",
+      "Delhivery",
+      "India Post"
+    ],
+    "cod_share": 0.3,
+    "pincodes": [
+      "110092",
+      "201301",
+      "226016",
+      "248001",
+      "302020",
+      "411045",
+      "560066",
+      "380015",
+      "122018",
+      "452010"
+    ]
+  },
+  "agent": {
+    "agent_name": "Ganga",
+    "persona": "Ganga speaks like a calm, trusted family farm member. Explains purity and sourcing simply. Prefers Hindi with Hindi speakers.",
+    "sales": {
+      "icp": "Organic and health-food stores, cafes, bakeries, Ayurveda clinics and corporate pantries in Indian cities buying ghee, honey and cold-pressed oils in bulk",
+      "offer": "Wholesale A2 ghee, raw honey and cold-pressed oils with monthly supply, farm-direct pricing from 10 kg",
+      "sender_name": "Ramesh from Ganga Farms"
+    },
+    "voice": {
+      "language": "hi",
+      "business_hours": "09:00-19:00 Mon-Sat"
+    },
+    "leads": [
+      {
+        "source": "widget",
+        "name": "Sunita Agarwal",
+        "company": "Prakriti Organic Store",
+        "email": "sunita@prakriti.example.in",
+        "phone": "+919829011122",
+        "city": "Jaipur",
+        "interest": "Monthly 20 L A2 ghee for her organic store",
+        "stage": "qualified",
+        "score": 81
+      },
+      {
+        "source": "voice",
+        "name": "Dr. Vivek Joshi",
+        "company": "Ayurveda Wellness Clinic",
+        "phone": "+919412233445",
+        "city": "Dehradun",
+        "interest": "Raw honey and ghee for clinic patients",
+        "stage": "callback",
+        "score": 68
+      }
+    ]
+  }
+}
