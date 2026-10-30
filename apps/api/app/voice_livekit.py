@@ -62,7 +62,9 @@ def voice_config(prof: dict, sarvam_cfg: dict) -> dict:
         "stt": {"model": "saaras:v4", "language": "en-IN" if lang == "en" else "hi-IN", "mode": "codemix" if lang == "hinglish" else "transcribe"},
         "tts": {"model": "bulbul:v3", "target_language_code": "en-IN" if lang == "en" else "hi-IN", "speaker": speaker,
                 "pace": float(v.get("pace") or 1.0)},
-        "sarvam_api_key": sarvam_cfg.get("api_key") or "",
+        # a Sarvam AI speech key (api.sarvam.ai). Not the Voice Agents key saved for Sarvam's hosted agents, which
+        # only works on apps.sarvam.ai, so a business can override the platform key with its own speech_api_key.
+        "sarvam_api_key": sarvam_cfg.get("speech_api_key") or "",
     }
 
 

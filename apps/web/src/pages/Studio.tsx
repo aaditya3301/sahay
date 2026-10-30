@@ -365,7 +365,7 @@ function LiveKitSetup() {
   if (!data) return <Spinner />
   const checks: [boolean, string, string][] = [
     [data.configured, 'LiveKit project', 'LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET on the server'],
-    [data.sarvam_key, 'Sarvam API key', 'SARVAM_API_KEY on the server, or this business\'s key under Sarvam Voice Agents'],
+    [data.sarvam_key, 'Sarvam API key', 'SARVAM_API_KEY on the server (a speech key from dashboard.sarvam.ai, not the Voice Agents key)'],
     [data.sip_trunk, 'Outbound SIP trunk', 'LIVEKIT_SIP_TRUNK_ID: only needed to dial real phones'],
   ]
   return (

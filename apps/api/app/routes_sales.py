@@ -539,7 +539,7 @@ async def livekit_status(ctx: Ctx = CtxDep):
         sarvam = await integration(db, "sarvam")
         lkcfg = await integration(db, "livekit")
         prof = await load_profile(db)
-    return {"configured": voice_livekit.configured(), "sarvam_key": bool(settings.sarvam_api_key or sarvam.get("api_key")),
+    return {"configured": voice_livekit.configured(), "sarvam_key": bool(settings.sarvam_api_key or sarvam.get("speech_api_key")),
             "sip_trunk": bool(lkcfg.get("sip_trunk_id") or settings.livekit_sip_trunk_id), "agent_name": settings.livekit_agent_name,
             "numbers": prof["voice"].get("numbers") or [], "voice": voice_livekit.voice_config(prof, sarvam)["tts"]}
 
