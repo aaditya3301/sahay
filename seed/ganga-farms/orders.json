@@ -1,0 +1,10 @@
+[
+  {"order_ref": "GF2031", "customer_name": "Kavita Iyer", "customer_phone": "+919822001122", "customer_email": "kavita.iyer@example.in",
+   "items": [["GF-GHE-1L", 1]], "payment_method": "prepaid", "status": "delivered", "delivered_days_ago": 0.25, "courier": "Xpressbees", "pincode": "411045", "city": "Pune"},
+  {"order_ref": "GF2040", "customer_name": "Mohit Jain", "customer_phone": "+919833445566", "customer_email": "mohit.jain@example.in",
+   "items": [["GF-HNY-500", 2], ["GF-JAG-1K", 1]], "payment_method": "cod", "status": "in_transit", "eta_days": 2, "courier": "Delhivery", "pincode": "302020", "city": "Jaipur", "shipment_status": "in_transit — departed Delhi hub"},
+  {"order_ref": "GF2045", "customer_name": "Anjali Desai", "customer_phone": "+919844556677", "customer_email": "anjali.desai@example.in",
+   "items": [["GF-OIL-1L", 2]], "payment_method": "prepaid", "status": "processing", "courier": "Xpressbees", "pincode": "380015", "city": "Ahmedabad"},
+  {"order_ref": "GF2019", "customer_name": "Suresh Pandey", "customer_phone": "+919855667788", "customer_email": "suresh.p@example.in",
+   "items": [["GF-HNY-500", 1]], "payment_method": "cod", "status": "delivered", "delivered_days_ago": 5, "courier": "India Post", "pincode": "226016", "city": "Lucknow"}
+]
