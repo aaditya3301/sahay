@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BellRing, Megaphone, Newspaper, Play, Plus, ShieldCheck, ShoppingCart } from 'lucide-react'
+import { Megaphone, Newspaper, Play, Plus, ShieldCheck, ShoppingCart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Badge, Button, Card, ChannelIcon, Empty, Field, inputCls, Modal, PageHeader, Spinner, Tabs } from '../components/ui'
 import { api } from '../lib/api'
@@ -11,8 +11,8 @@ export default function Campaigns() {
   const [tab, setTab] = useState('campaigns')
   return (
     <>
-      <PageHeader title="Campaigns & automations" subtitle="Grow customers after support: campaigns you approve, plus proactive messages that go out before anyone complains." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'campaigns', label: 'Campaigns' }, { id: 'auto', label: 'Proactive & automations' }]} />
+      <PageHeader title="Campaigns" subtitle="Campaigns, follow-ups and automations." />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'campaigns', label: 'Campaigns' }, { id: 'auto', label: 'Automations' }]} />
       <div className="mt-4">{tab === 'campaigns' ? <CampaignList /> : <Automations />}</div>
     </>
   )
@@ -35,15 +35,15 @@ function CampaignList() {
   if (isLoading) return <Spinner />
   return (
     <>
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900"><ShieldCheck className="h-4 w-4" />Draft first, you approve, then it sends. Customers with an open angry ticket are never sent promos.</div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => newsletter.mutate()} loading={newsletter.isPending} title="Drafted automatically on the 1st of every month"><Newspaper className="h-4 w-4" />Draft this month's newsletter</Button>
+      <div className="campaign-toolbar">
+        <div className="campaign-approval-note" title="Customers with an open angry ticket are never sent promotional messages."><ShieldCheck size={16} />You approve every campaign before it sends.</div>
+        <div className="campaign-toolbar-actions">
+          <Button variant="secondary" onClick={() => newsletter.mutate()} loading={newsletter.isPending} title="Draft this month's newsletter"><Newspaper className="h-4 w-4" />Draft newsletter</Button>
           <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" />New campaign</Button>
         </div>
       </div>
       <Card pad={false}>
-        {!data?.campaigns?.length ? <Empty icon={<Megaphone className="h-10 w-10" />} title="No campaigns yet">Describe a goal ("Diwali gift boxes for repeat buyers") and the AI drafts the message using your live products and prices.</Empty> : (
+        {!data?.campaigns?.length ? <Empty icon={<Megaphone className="h-10 w-10" />} title="No campaigns yet">Create a campaign to draft a message for your customers.</Empty> : (
           <div className="divide-y divide-slate-100">
             {data.campaigns.map((c: any) => (
               <button key={c.id} onClick={() => setSel(c.id)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50">
@@ -150,9 +150,9 @@ const kindTone = (k: string) => ({ delay_alert: 'orange', cod_confirm: 'blue', c
 
 function WaBubble({ text, when }: { text: string; when?: string }) {
   return (
-    <div className="rounded-xl bg-[#e7f8dc] px-3 py-2 text-sm text-slate-800 shadow-sm">
+    <div className="automation-message px-3 py-2 text-sm text-slate-800">
       <div className="whitespace-pre-wrap">{text}</div>
-      {when && <div className="mt-1 text-right text-[10px] text-slate-500">{time(when)}</div>}
+      {when && <div className="mt-1 text-right text-xs text-slate-500">{time(when)}</div>}
     </div>
   )
 }
@@ -165,25 +165,25 @@ function Automations() {
   const { data: carts } = useQuery({ queryKey: ['carts'], queryFn: () => api('/v1/automations/carts'), refetchInterval: 8000 })
   if (isLoading) return <Spinner />
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+    <div className="automations-layout">
       <div className="space-y-4">
-        <Card title="What runs automatically" action={<Button size="sm" onClick={() => run.mutate()} loading={run.isPending}><Play className="h-3.5 w-3.5" />Run now</Button>}>
-          <div className="grid gap-2 text-sm md:grid-cols-2">
+        <Card title="Customer follow-ups" action={<Button size="sm" onClick={() => run.mutate()} loading={run.isPending}><Play className="h-3.5 w-3.5" />Check now</Button>}>
+          <dl className="automation-types">
             {[
-              ['🚚 Delay alerts', 'Parcel past its expected date → the customer hears from you first, before they complain.'],
-              ['💵 COD confirmations', 'New COD orders get a WhatsApp Confirm / Cancel (and a call if voice is on) before shipping.'],
-              ['📧 Lead follow-ups', 'No reply after the follow-up window → a follow-up is drafted for your approval; dropped after the last one.'],
-              ['📞 Callbacks', 'Callbacks booked in chat are handed to the voice agent when due.'],
-              ['🛒 Cart reminders', 'Checkout left without ordering → one gentle WhatsApp reminder (Shopify abandoned checkouts too). Skipped if they ordered, opted out or are upset.'],
-              ['📰 Monthly newsletter', 'On the 1st the AI drafts an email from last month: bestsellers, a tip, what\'s new. You approve; every email has an unsubscribe link.'],
-            ].map(([t, d]) => <div key={t} className="rounded-lg border border-slate-100 p-2.5"><div className="font-medium">{t}</div><div className="text-xs text-slate-500">{d}</div></div>)}
-          </div>
-          <p className="mt-2 text-[11px] text-slate-400">One Cloud Scheduler job runs this at 9am, 1pm, 5pm and 9pm IST (the 9pm run also sends the owner summary). Between runs the service sleeps, which keeps it cheap.</p>
+              ['Delivery delays', 'Let customers know when a parcel is overdue.'],
+              ['Cash-on-delivery orders', 'Ask customers to confirm before shipping.'],
+              ['Lead follow-ups', 'Draft a follow-up for your approval.'],
+              ['Callbacks', 'Return calls booked by your customers.'],
+              ['Cart reminders', 'Remind shoppers about unfinished checkouts.'],
+              ['Monthly newsletter', 'Draft an email for you to review.'],
+            ].map(([t, d]) => <div key={t}><dt>{t}</dt><dd>{d}</dd></div>)}
+          </dl>
+          <details className="dashboard-disclosure automation-explanation"><summary>Timing and customer safeguards</summary><div className="setup-help space-y-2"><p>When scheduling is configured, checks run at 9am, 1pm, 5pm and 9pm IST. The evening run also sends your daily summary.</p><p>Cart reminders are sent once and skipped if the customer ordered, opted out or is upset. Lead follow-ups and newsletters are drafted for approval. Newsletters include an unsubscribe link.</p><p>Cash-on-delivery confirmations use WhatsApp, plus a call if enabled. Callbacks run when due. Follow-ups stop after the last scheduled attempt.</p></div></details>
           {run.data && <div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(run.data).map(([k, v]) => <Badge key={k} tone={(v as number) > 0 ? 'green' : 'slate'}>{humanize(k)}: {String(v)}</Badge>)}</div>}
           {run.isError && <div className="mt-2 text-xs text-red-600">{(run.error as Error).message}</div>}
         </Card>
-        <Card title="Proactive messages sent" pad={false}>
-          {!data?.events?.length ? <Empty icon={<BellRing className="h-10 w-10" />} title="Nothing sent yet">Click "Run now" to check for late parcels and unconfirmed COD orders.</Empty> : (
+        <Card title="Recent activity" pad={false} className="automation-history">
+          {!data?.events?.length ? <Empty title="No messages sent yet">Customer follow-ups will appear here.</Empty> : (
             <div className="divide-y divide-slate-100">
               {data.events.map((e: any) => (
                 <div key={e.id} className="px-4 py-3">
@@ -198,11 +198,12 @@ function Automations() {
         </Card>
       </div>
       <div className="space-y-4">
-        <Card title="Owner's daily WhatsApp summary" action={<Button size="sm" variant="secondary" onClick={() => summary.mutate()} loading={summary.isPending}>Send today's summary</Button>}>
-          <div className="rounded-xl bg-[#efeae2] p-3">
+        <Card title="Daily WhatsApp summary">
+          <div className="automation-summary">
             {summary.data?.text ? <WaBubble text={summary.data.text} /> : data?.last_summary ? <WaBubble text={data.last_summary.data?.text} when={data.last_summary.created_at} /> : <div className="text-center text-xs text-slate-500">No summary yet.</div>}
           </div>
-          <p className="mt-2 text-[11px] text-slate-400">Goes to the owner's WhatsApp from Settings (simulated until WhatsApp is connected).</p>
+          <p className="setup-help">Sent to the owner’s WhatsApp number. Demo mode until WhatsApp is connected.</p>
+          <Button size="sm" variant="secondary" className="mt-3" onClick={() => summary.mutate()} loading={summary.isPending}>Send today’s summary</Button>
         </Card>
         <Card title="Carts" action={<ShoppingCart className="h-4 w-4 text-slate-400" />}>
           {!carts?.length ? <div className="text-xs text-slate-500">No carts yet. Add items on the demo storefront and leave checkout.</div> : (
@@ -217,15 +218,15 @@ function Automations() {
             </div>
           )}
         </Card>
-        <Card title="Settings">
-          <div className="space-y-1 text-sm text-slate-600">
-            <div>Save-the-order offers: <b>{data?.settings?.save_the_order ? 'on' : 'off'}</b></div>
-            <div>COD confirmation calls: <b>{data?.settings?.cod_calls ? 'on' : 'off'}</b></div>
-            <div>Lead follow-up after: <b>{data?.settings?.follow_up_days ?? 3} days</b></div>
-            <div>Cart reminders: <b>{data?.settings?.cart_reminders === false ? 'off' : `after ${data?.settings?.cart_reminder_hours ?? 1}h`}</b></div>
-            <div>Monthly newsletter draft: <b>{data?.settings?.newsletter === false ? 'off' : 'on'}</b></div>
-            <a href="/studio" className="text-xs font-medium text-brand-700 underline">Change in Agent Studio →</a>
-          </div>
+        <Card title="Automation preferences">
+          <dl className="automation-preferences">
+            <div><dt>Save-the-order offers</dt><dd>{data?.settings?.save_the_order ? 'On' : 'Off'}</dd></div>
+            <div><dt>Confirmation calls</dt><dd>{data?.settings?.cod_calls ? 'On' : 'Off'}</dd></div>
+            <div><dt>Lead follow-up</dt><dd>After {data?.settings?.follow_up_days ?? 3} days</dd></div>
+            <div><dt>Cart reminder</dt><dd>{data?.settings?.cart_reminders === false ? 'Off' : `After ${data?.settings?.cart_reminder_hours ?? 1}h`}</dd></div>
+            <div><dt>Newsletter draft</dt><dd>{data?.settings?.newsletter === false ? 'Off' : 'On'}</dd></div>
+          </dl>
+          <a href="/studio?tab=persona" className="setup-text-link">Edit in Agent Studio →</a>
         </Card>
         {data?.runs?.length > 0 && (
           <Card title="Recent runs">
