@@ -8,6 +8,6 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
-    proxy: Object.fromEntries(['/v1', '/media', '/public', '/widget.js', '/webhooks', '/api'].map((p) => [p, api])),
+    proxy: Object.fromEntries(['/v1', '/media', '/public', '/widget.js', '/w/', '/r/', '/webhooks', '/api'].map((p) => [p, api])),
   },
 })
