@@ -515,11 +515,53 @@ async def sarvam_test_call(body: DialBody, ctx: Ctx = CtxDep):
 
 @router.post("/calls/{call_id}/dial")
 async def dial(call_id: str, ctx: Ctx = CtxDep):
-    from app import voice_sarvam
+    from app import voice_livekit, voice_sarvam
 
+    async with tenant_session(ctx.tenant_id) as db:
+        provider = (await load_profile(db))["voice"].get("provider")
     try:
+        if provider == "livekit":
+            return jsonable(await voice_livekit.place_call(ctx.tenant_id, call_id))
         return jsonable(await voice_sarvam.place_call(ctx.tenant_id, call_id))
     except (ValueError, RuntimeError) as e:
+        raise HTTPException(400, str(e))
+
+
+# ---------------------------------------------------------------------------
+# LiveKit + Sarvam (our own voice agent): status, browser test calls on the real voice, outbound test calls
+# ---------------------------------------------------------------------------
+@router.get("/voice/livekit")
+async def livekit_status(ctx: Ctx = CtxDep):
+    from app import voice_livekit
+    from app.channels import integration
+
+    async with tenant_session(ctx.tenant_id) as db:
+        sarvam = await integration(db, "sarvam")
+        lkcfg = await integration(db, "livekit")
+        prof = await load_profile(db)
+    return {"configured": voice_livekit.configured(), "sarvam_key": bool(settings.sarvam_api_key or sarvam.get("api_key")),
+            "sip_trunk": bool(lkcfg.get("sip_trunk_id") or settings.livekit_sip_trunk_id), "agent_name": settings.livekit_agent_name,
+            "numbers": prof["voice"].get("numbers") or [], "voice": voice_livekit.voice_config(prof, sarvam)["tts"]}
+
+
+@router.post("/voice/livekit/web-call")
+async def livekit_web_call(body: TestCall, ctx: Ctx = CtxDep):
+    from app import voice_livekit
+
+    try:
+        return jsonable(await voice_livekit.web_call(ctx.tenant_id, phone=body.phone, purpose=body.purpose,
+                                                     identity=f"dash-{ctx.user_id}", name=ctx.user_name or "Dashboard"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/voice/livekit/test-call")
+async def livekit_test_call(body: DialBody, ctx: Ctx = CtxDep):
+    from app import voice_livekit
+
+    try:
+        return jsonable(await voice_livekit.queue_and_dial(ctx.tenant_id, body.phone, body.purpose))
+    except ValueError as e:
         raise HTTPException(400, str(e))
 
 
@@ -589,7 +631,7 @@ async def integration_health(ctx: Ctx = CtxDep):
     """Green / amber / red for each way the business is connected to us."""
     import time as _t
 
-    from app.channels import integration
+    from app.channels import email_ready, integration
     from app.commerce import CustomCommerce, get_commerce
 
     checks = []
@@ -630,8 +672,8 @@ async def integration_health(ctx: Ctx = CtxDep):
             f"{wh['eps']} endpoint(s) · {wh['ok']} delivered, {wh['bad']} failed (7 days)" if wh["eps"] else "None set (optional)")
         wa, em, sv = await integration(db, "whatsapp"), await integration(db, "email"), await integration(db, "sarvam")
         add("whatsapp", "WhatsApp", "green" if wa.get("access_token") else "amber", "connected" if wa.get("access_token") else "simulated until you add Meta credentials")
-        add("email", "Email", "green" if (em.get("api_key") or settings.resend_api_key) else "amber",
-            "connected" if (em.get("api_key") or settings.resend_api_key) else "simulated until you add Resend")
+        add("email", "Email", "green" if email_ready(em) else "amber",
+            "connected (Brevo)" if email_ready(em) else "simulated until you add a Brevo key and a verified sender")
         last_call = await db.val("SELECT max(created_at) FROM voice_calls")
         sarvam_ok = all(sv.get(k) for k in ("api_key", "org_id", "workspace_id", "app_id", "connection_id", "agent_phone_number"))
         add("voice", "Voice agent (Sarvam)", "green" if sarvam_ok else "amber",

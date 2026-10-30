@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Eye, Mic, MicOff, Phone, PhoneOff, Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Card, cx, Field, inputCls, PageHeader, Spinner, Tabs } from '../components/ui'
 import { api } from '../lib/api'
@@ -244,12 +244,15 @@ function WidgetTab({ p, setIn, data }: { p: any; setIn: (k: string, f: string, v
   )
 }
 
+// livekit-client is large; only load it when someone opens a real-voice test call
+const LiveKitCall = lazy(() => import('../components/LiveKitCall').then((m) => ({ default: m.LiveKitCall })))
+
 function VoiceTab({ p, setIn, data }: { p: any; setIn: (k: string, f: string, v: any) => void; data: any }) {
   const v = p.voice
   const base = data.public_base_url
   return (
     <div className="space-y-4">
-    <VoiceProvider provider={v.provider || 'sarvam'} onProvider={(x) => setIn('voice', 'provider', x)} />
+    <VoiceProvider provider={v.provider || 'livekit'} onProvider={(x) => setIn('voice', 'provider', x)} />
     <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
       <div className="space-y-4">
         <Card title="Voice settings">
@@ -308,14 +311,14 @@ function VoiceProvider({ provider, onProvider }: { provider: string; onProvider:
   const connected = data?.connected || {}
   const allOk = Object.values(connected).length > 0 && Object.values(connected).every(Boolean)
   return (
-    <Card title="Phone provider" action={allOk ? <Badge tone="green">Sarvam connected</Badge> : <Badge tone="amber">not connected</Badge>}>
+    <Card title="Phone provider" action={provider === 'livekit' ? null : allOk ? <Badge tone="green">Sarvam connected</Badge> : <Badge tone="amber">not connected</Badge>}>
       <div className="mb-3 flex flex-wrap gap-2">
-        {[['sarvam', 'Sarvam Voice Agents (recommended)'], ['naaradh', 'Your own pipeline (Naaradh API)']].map(([id, label]) => (
+        {[['livekit', 'Sarvam voice on LiveKit (recommended)'], ['sarvam', 'Sarvam Voice Agents'], ['naaradh', 'Your own pipeline (Naaradh API)']].map(([id, label]) => (
           <button key={id} onClick={() => onProvider(id)} className={cx('rounded-lg border px-3 py-1.5 text-sm', provider === id ? 'border-brand-500 bg-brand-50 font-medium text-brand-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}>{label}</button>
         ))}
         <span className="self-center text-[11px] text-slate-400">Save the choice with "Save changes" at the top.</span>
       </div>
-      {provider !== 'sarvam' ? (
+      {provider === 'livekit' ? <LiveKitSetup /> : provider !== 'sarvam' ? (
         <p className="text-sm text-slate-600">Your pipeline calls our Voice API below (start → turn/tool → end) with your secret key, and we POST due outbound calls to the webhook you set. Same brain, tools and rules.</p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_1.3fr]">
@@ -338,6 +341,43 @@ function VoiceProvider({ provider, onProvider }: { provider: string; onProvider:
         </div>
       )}
     </Card>
+  )
+}
+
+function LiveKitSetup() {
+  const { data } = useQuery({ queryKey: ['livekit'], queryFn: () => api('/v1/voice/livekit') })
+  const [phone, setPhone] = useState('')
+  const test = useMutation({ mutationFn: () => api('/v1/voice/livekit/test-call', { body: { phone } }) })
+  if (!data) return <Spinner />
+  const checks: [boolean, string, string][] = [
+    [data.configured, 'LiveKit project', 'LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET on the server'],
+    [data.sarvam_key, 'Sarvam API key', 'SARVAM_API_KEY on the server, or this business\'s key under Sarvam Voice Agents'],
+    [data.sip_trunk, 'Outbound SIP trunk', 'LIVEKIT_SIP_TRUNK_ID: only needed to dial real phones'],
+  ]
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_1.3fr]">
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Our own voice agent: LiveKit carries the call (browser or phone), Sarvam listens (Saaras) and speaks (Bulbul{data.voice?.speaker ? `, voice ${data.voice.speaker}` : ''}), Gemini picks the words, and every action goes through your rules. Browser test calls need no phone number.</p>
+        <div className="space-y-1.5">
+          {checks.map(([ok, label, hint]) => (
+            <div key={label} className="flex items-start gap-2 text-sm"><Badge tone={ok ? 'green' : 'slate'}>{ok ? '✓' : '○'}</Badge><div><div className="font-medium">{label}</div><div className="text-[11px] text-slate-500">{hint}</div></div></div>
+          ))}
+        </div>
+        <div className="text-[11px] text-slate-500">Worker name: <code>{data.agent_name}</code>. Numbers routed here: {data.numbers?.length ? data.numbers.join(', ') : 'none yet (add them in Voice settings)'}.</div>
+      </div>
+      <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-xs text-slate-600">
+        <div className="text-sm font-semibold text-slate-800">Phone calls (optional)</div>
+        <div>1. Get a number from a SIP provider (Plivo, Twilio, Telnyx, Exotel vSIP). Indian numbers usually need KYC.</div>
+        <div>2. Run <code>scripts/livekit_sip.py inbound --numbers +91…</code> so calls reach this agent, and add the number in Voice settings.</div>
+        <div>3. Run <code>scripts/livekit_sip.py outbound …</code> and set <code>LIVEKIT_SIP_TRUNK_ID</code> so the agent can dial out (callbacks, COD checks).</div>
+        <div className="flex gap-2 pt-1">
+          <input className={inputCls} placeholder="+91 your phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Button size="sm" onClick={() => test.mutate()} loading={test.isPending} disabled={!phone.trim() || !data.sip_trunk}><Phone className="h-3.5 w-3.5" />Call me</Button>
+        </div>
+        {test.isSuccess && <div className="text-emerald-700">Dialling… the call appears on the Calls page.</div>}
+        {test.isError && <div className="text-red-600">{(test.error as Error).message}</div>}
+      </div>
+    </div>
   )
 }
 
@@ -399,6 +439,9 @@ function TestCall() {
   const recRef = useRef<any>(null)
   const callRef = useRef<any>(null)
   const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  const { data: lk } = useQuery({ queryKey: ['livekit'], queryFn: () => api('/v1/voice/livekit') })
+  const [mode, setMode] = useState<'' | 'livekit' | 'browser'>('')
+  const real = (mode || (lk?.configured ? 'livekit' : 'browser')) === 'livekit'
 
   const speak = (text: string) => new Promise<void>((resolve) => {
     const synth = window.speechSynthesis
@@ -463,7 +506,28 @@ function TestCall() {
   }
 
   return (
-    <Card title={<span className="flex items-center gap-1.5"><Phone className="h-4 w-4 text-brand-600" />Test call in your browser</span>}>
+    <Card title={<span className="flex items-center gap-1.5"><Phone className="h-4 w-4 text-brand-600" />Test call in your browser</span>}
+      action={!call && (
+        <div className="flex gap-1">
+          {[['livekit', 'Sarvam voice'], ['browser', 'Browser voice']].map(([id, label]) => (
+            <button key={id} onClick={() => setMode(id as any)} disabled={id === 'livekit' && !lk?.configured}
+              title={id === 'livekit' && !lk?.configured ? 'Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET on the server' : undefined}
+              className={cx('rounded-md px-2 py-1 text-xs', (id === 'livekit') === real ? 'bg-brand-50 font-medium text-brand-700' : 'text-slate-500 hover:bg-slate-50 disabled:opacity-40')}>{label}</button>
+          ))}
+        </div>
+      )}>
+      {real ? (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">The real phone pipeline in your browser: LiveKit carries the audio, Sarvam listens and speaks{lk?.voice?.speaker ? ` (voice: ${lk.voice.speaker}, ${lk.voice.target_language_code})` : ''}, and the agent uses the same tools and rules as a call. Allow microphone access when asked.</p>
+          <Field label="Call as">
+            <select className={inputCls + ' w-72'} value={phone} onChange={(e) => setPhone(e.target.value)}>
+              <option value="">Unknown caller (new number)</option>
+              {(contacts || []).map((c: any) => <option key={c.customer_phone} value={c.customer_phone}>{c.customer_name} · #{c.order_ref} ({humanize(c.status)})</option>)}
+            </select>
+          </Field>
+          <Suspense fallback={<Spinner />}><LiveKitCall phone={phone} /></Suspense>
+        </div>
+      ) : <>
       {!SR && <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">This browser has no speech recognition (use Chrome for voice). You can still type what the caller says.</div>}
       {!call ? (
         <div className="flex flex-wrap items-end gap-2">
@@ -516,6 +580,7 @@ function TestCall() {
           <Link to="/calls" className="mt-2 inline-block text-xs font-medium text-brand-700 underline">See it in Calls →</Link>
         </div>
       )}
+      </>}
     </Card>
   )
 }

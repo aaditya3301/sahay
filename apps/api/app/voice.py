@@ -1,6 +1,6 @@
 """Voice agent: the same Agent Profile, skills, tools and policy gate as chat, tuned for phone calls.
 
-A telephony pipeline (Naaradh: Exotel/Plivo + Sarvam STT/TTS) calls these functions over HTTP:
+A telephony pipeline (our LiveKit + Sarvam worker in voice_agent.py, or Naaradh) calls these functions over HTTP:
   start  → we find the business (dialled number or its key) and the caller (caller ID), preload their
            orders / open tickets / lead status, and return the greeting + system prompt + tools
   turn   → caller said something: we run the agent loop (tools, policy) and return a short line to speak
@@ -34,8 +34,13 @@ VOICE_RULES = """Phone call rules:
 - Never read out links or long codes: use send_link_whatsapp and tell them to check WhatsApp.
 - If they ask for a person, are very upset, or it's a legal/sensitive matter, use transfer_to_human.
 - Let them interrupt; answer the latest thing they said.
-- When the caller is done, say a warm goodbye and set end_call true.
-Reply with ONLY JSON: {{"say": "...", "end_call": false}}"""
+{ending}"""
+JSON_REPLY = """- When the caller is done, say a warm goodbye and set end_call true.
+Reply with ONLY JSON: {"say": "...", "end_call": false}"""
+# Streaming pipelines (LiveKit + Sarvam) speak the model's text as it arrives, so no JSON wrapper
+STREAM_REPLY = """- Reply with only the words to speak.{script}
+- When the caller is done, say a warm goodbye, then call end_call."""
+DEVANAGARI = " Write Hindi words in Devanagari and keep English words (order, delivery, refund, numbers) in English, so the voice reads both naturally."
 
 PURPOSE_GOALS = {
     "cod_confirmation": "This is an outbound call to confirm a cash-on-delivery order before it ships. Confirm the order (confirm_cod) or note the cancellation request.",
@@ -82,7 +87,7 @@ async def _caller_context(db, customer: dict | None, phone: str | None, exclude_
 
 
 async def start_call(tenant_id: str, *, direction: str, from_number: str | None, to_number: str | None,
-                     purpose: str = "inbound", call_id: str | None = None, test: bool = False) -> dict:
+                     purpose: str = "inbound", call_id: str | None = None, test: bool = False, stream: bool = False) -> dict:
     from app.pipeline import InboundMessage, resolve_customer
 
     caller = norm_phone(from_number if direction == "inbound" else to_number)
@@ -120,14 +125,14 @@ async def start_call(tenant_id: str, *, direction: str, from_number: str | None,
             if direction == "inbound" else
             f"Namaste{' ' + name + ' ji' if name else ''}, main {srow['tenant_name']} se {prof['agent_name']} bol rahi hoon.")
         await db.exec("UPDATE voice_calls SET transcript=:tr WHERE id=:id", tr=[{"role": "agent", "text": greeting, "at": time.time()}], id=call["id"])
-    system = build_system(prof, srow, context, purpose, goal_ctx)
+    system = build_system(prof, srow, context, purpose, goal_ctx, stream=stream)
     names = _voice_tools(prof)
     specs = {**TOOL_SPECS, **custom_tool_specs(prof)}
     return {"call_id": str(call["id"]), "greeting": greeting, "context": context, "system_prompt": system,
             "tools": [{"name": n, "description": specs[n]["description"], "parameters": specs[n]["parameters"]} for n in names if n in specs]}
 
 
-def build_system(prof: dict, srow: dict, context: dict, purpose: str, goal_ctx: dict) -> str:
+def build_system(prof: dict, srow: dict, context: dict, purpose: str, goal_ctx: dict, stream: bool = False) -> str:
     lang = {"hinglish": "Hinglish (Hindi + English, natural Indian phone style)", "hi": "simple Hindi", "en": "Indian English"}.get(
         prof["voice"].get("language") or "hinglish", "Hinglish")
     goal = PURPOSE_GOALS.get(purpose, "").format(topic=goal_ctx.get("topic", ""))
@@ -136,7 +141,8 @@ def build_system(prof: dict, srow: dict, context: dict, purpose: str, goal_ctx: 
             f"What we already know about the caller (looked up before the call): {json.dumps(context, default=str)}\n"
             "The caller's orders above were looked up seconds ago: answer status/ETA questions from them directly without calling a tool. "
             "Use tools for anything not above (other orders, stock, price, actions). Policy rules are enforced by the tools; never promise what a tool didn't confirm.\n"
-            + VOICE_RULES.format(language=lang))
+            + VOICE_RULES.format(language=lang, ending=STREAM_REPLY.format(script="" if prof["voice"].get("language") == "en" else DEVANAGARI)
+                                 if stream else JSON_REPLY))
 
 
 def _voice_tools(prof: dict) -> list[str]:

@@ -150,10 +150,14 @@ async def run_lifecycle(tenant_id: str) -> dict:
                 await db.exec("UPDATE leads SET next_action='Approve follow-up email', next_action_at=NULL WHERE id=:id", id=d["id"])
             done["followups_drafted"] += 1
 
-    # 5. due outbound calls → Sarvam (or the Naaradh webhook)
+    # 5. due outbound calls → our LiveKit agent, Sarvam Voice Agents, or the Naaradh webhook
     hook = prof["voice"].get("webhook_url")
-    if prof["voice"].get("enabled") and prof["voice"].get("provider", "sarvam") == "sarvam" and await _sarvam_ready(tenant_id):
-        from app.voice_sarvam import place_call
+    provider = prof["voice"].get("provider", "sarvam")
+    if prof["voice"].get("enabled") and ((provider == "sarvam" and await _sarvam_ready(tenant_id)) or provider == "livekit"):
+        if provider == "livekit":
+            from app.voice_livekit import place_call
+        else:
+            from app.voice_sarvam import place_call
 
         async with tenant_session(tenant_id) as db:
             due = await db.all("SELECT id FROM voice_calls WHERE status='queued' AND direction='outbound' AND scheduled_for <= now() LIMIT 10")
@@ -162,7 +166,7 @@ async def run_lifecycle(tenant_id: str) -> dict:
                 await place_call(tenant_id, str(c["id"]))
                 done["calls_dispatched"] += 1
             except Exception as e:
-                log.warning("sarvam dial failed: %s", e)
+                log.warning("%s dial failed: %s", provider, e)
     elif hook and prof["voice"].get("enabled"):
         async with tenant_session(tenant_id) as db:
             calls = await db.all("SELECT * FROM voice_calls WHERE status='queued' AND direction='outbound' AND scheduled_for <= now() LIMIT 10")

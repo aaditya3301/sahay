@@ -586,6 +586,71 @@ async def sarvam_end(request: Request, authorization: str | None = Header(None),
 
 
 # ---------------------------------------------------------------------------
+# LiveKit + Sarvam worker (see voice_livekit.py and voice_agent.py). It authenticates with the per-call token from
+# the dispatch metadata; an inbound phone call has none yet, so it sends the platform key and the dialled number.
+# ---------------------------------------------------------------------------
+class LkSession(BaseModel):
+    from_number: str | None = None
+    to_number: str | None = None
+
+
+class LkTranscript(BaseModel):
+    transcript: list[dict] = []
+    status: str = "completed"
+    error: str | None = None
+
+
+def _lk_call(authorization: str | None) -> tuple[str, str]:
+    from app.voice_livekit import read_call_token
+
+    if not (tc := read_call_token((authorization or "").removeprefix("Bearer ").strip())):
+        raise HTTPException(401, "bad call token")
+    return tc
+
+
+@router.post("/v1/voice/livekit/session")
+async def lk_session(body: LkSession, authorization: str | None = Header(None), x_platform_key: str | None = Header(None)):
+    from app import voice_livekit
+
+    if authorization:
+        tid, call_id = _lk_call(authorization)
+    else:
+        tid, call_id = await voice_tenant(None, x_platform_key, body.to_number), None
+    try:
+        return jsonable(await voice_livekit.session(tid, call_id, from_number=body.from_number, to_number=body.to_number))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/v1/voice/livekit/tool")
+async def lk_tool(body: CallTool, authorization: str | None = Header(None)):
+    from app import voice_livekit
+
+    tid, call_id = _lk_call(authorization)
+    return jsonable(await voice_livekit.tool(tid, call_id, body.name, body.args))
+
+
+@router.post("/v1/voice/livekit/transcript")
+async def lk_transcript(body: LkTranscript, authorization: str | None = Header(None)):
+    from app import voice_livekit
+
+    tid, call_id = _lk_call(authorization)
+    await voice_livekit.live_transcript(tid, call_id, body.transcript)
+    return {"ok": True}
+
+
+@router.post("/v1/voice/livekit/end")
+async def lk_end(body: LkTranscript, authorization: str | None = Header(None)):
+    from app import voice_livekit
+
+    tid, call_id = _lk_call(authorization)
+    try:
+        return jsonable(await voice_livekit.end(tid, call_id, body.transcript, body.status, body.error))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+# ---------------------------------------------------------------------------
 # "Talk to us" inside the widget: a browser voice call (mic + speech) on the same brain, no telephony cost
 # ---------------------------------------------------------------------------
 class WebVoice(BaseModel):

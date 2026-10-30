@@ -20,4 +20,5 @@ COPY seed /app/seed
 COPY --from=web /web/dist /app/apps/web/dist
 ENV PATH="/app/apps/api/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONIOENCODING=utf-8
 EXPOSE 8080
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips='*'"]
+# The LiveKit voice worker (app/voice_agent.py) runs next to the API when LiveKit is configured, restarted if it exits
+CMD ["sh", "-c", "if [ -n \"$LIVEKIT_URL\" ]; then (while true; do python -m app.voice_agent start; sleep 5; done) & fi; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips='*'"]
