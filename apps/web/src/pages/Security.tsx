@@ -15,7 +15,7 @@ export default function Security() {
   const count = (k: string) => data.events.filter((e: any) => e.kind === k).length
   return (
     <>
-      <PageHeader title="Security" subtitle="The AI can be talked to by anyone. Here's proof that only your rules move money and data." />
+      <PageHeader title="Security" subtitle="Review safeguards and security activity." />
       <div className="mb-4 grid gap-3 md:grid-cols-4">
         <Stat label="Injection attempts blocked" value={count('prompt_injection')} icon={<ShieldAlert className="h-4 w-4" />} />
         <Stat label="Actions denied by code" value={data.denied_actions.length} icon={<Lock className="h-4 w-4" />} />

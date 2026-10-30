@@ -22,7 +22,7 @@ export default function Simulations() {
   const toggle = (k: string) => setChosen(chosen.includes(k) ? chosen.filter((x) => x !== k) : [...chosen, k])
   return (
     <>
-      <PageHeader title="Simulations" subtitle="Test Sahay before it talks to real customers. Runs the real pipeline in dry-run: nothing is sent, no money moves." />
+      <PageHeader title="Simulations" subtitle="Test your agent. No messages sent or actions taken." />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={<span className="flex items-center gap-1.5"><Users className="h-4 w-4 text-brand-600" />AI mystery shoppers</span>}>
           <p className="mb-3 text-sm text-slate-500">Simulated customers — angry, confused, Hindi-only, fraudsters, prompt-injectors — chat with your agent. You get a readiness score and every failing transcript.</p>

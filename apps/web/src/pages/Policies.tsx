@@ -19,7 +19,7 @@ export default function Policies() {
   if (isLoading) return <Spinner />
   return (
     <>
-      <PageHeader title="Policies" subtitle="Write your rules in plain words. Sahay compiles them once into rules that code enforces on every action — the AI can propose, only the rules decide." />
+      <PageHeader title="Policies" subtitle="Your rules for what Sahay can do." />
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
         <div className="space-y-4">
           <Card title={<span className="flex items-center gap-1.5"><Wand2 className="h-4 w-4 text-brand-600" />Your rules, in your words</span>}>

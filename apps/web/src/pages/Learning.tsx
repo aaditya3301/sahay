@@ -14,7 +14,7 @@ export default function Learning() {
   if (isLoading || !data) return <Spinner />
   return (
     <>
-      <PageHeader title="Learning" subtitle="Every edit your team makes to an AI draft is a lesson. Approved lessons shape future replies; autonomy grows intent by intent." />
+      <PageHeader title="Learning" subtitle="Help your agent learn from your team’s edits." />
       <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
         <div className="space-y-4">
           <Card title="Lessons from your team's edits" action={<Button size="sm" variant="secondary" onClick={() => extract.mutate()} loading={extract.isPending}>Learn from recent edits</Button>}>
