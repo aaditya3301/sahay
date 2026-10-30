@@ -13,7 +13,7 @@ export default function Customers() {
   const { data, isLoading } = useQuery({ queryKey: ['customers', q], queryFn: () => api(`/v1/customers?q=${encodeURIComponent(q)}`) })
   return (
     <>
-      <PageHeader title="Customers" subtitle="One timeline per person across WhatsApp, email, chat and calls." actions={<input className={inputCls + ' w-64'} placeholder="Search name, phone, email" value={q} onChange={(e) => setQ(e.target.value)} />} />
+      <PageHeader title="Customers" subtitle="Every customer and their conversation history." actions={<input className={inputCls + ' w-64'} placeholder="Search name, phone, email" value={q} onChange={(e) => setQ(e.target.value)} />} />
       <Card pad={false}>
         {isLoading ? <Spinner /> : !data?.length ? <Empty icon={<Users className="h-10 w-10" />} title="No customers yet" /> : (
           <table className="w-full text-sm">
