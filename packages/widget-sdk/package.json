@@ -1,0 +1,16 @@
+{
+  "name": "@sahay/widget",
+  "version": "0.1.0",
+  "description": "Embed your business's Sahay AI sales & support chat on any website.",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./react": { "types": "./react.d.ts", "default": "./react.js" }
+  },
+  "peerDependencies": { "react": ">=17" },
+  "peerDependenciesMeta": { "react": { "optional": true } },
+  "files": ["index.js", "index.d.ts", "react.js", "react.d.ts", "README.md"],
+  "license": "MIT"
+}
