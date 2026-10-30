@@ -172,7 +172,7 @@ async def ingest(tenant_id: str, msg: InboundMessage) -> dict | None:
             if not conv:  # a reply to one of our emails quotes its Message-ID
                 conv = await db.one("SELECT c.* FROM messages m JOIN conversations c ON c.id=m.conversation_id "
                                     "WHERE m.channel=:c AND m.external_id=:t AND m.direction='out' LIMIT 1", c=msg.channel, t=msg.thread_id)
-        if not conv:
+        if not conv and msg.channel != "telegram":  # a Telegram chat is its own thread: never reply into another chat
             conv = await db.one(
                 "SELECT * FROM conversations WHERE channel=:c AND customer_id=:cu ORDER BY created_at DESC LIMIT 1",
                 c=msg.channel, cu=customer["id"],
