@@ -1,0 +1,11 @@
+{
+  "name": "@sahay/node",
+  "version": "0.1.0",
+  "description": "Server SDK for Sahay: sign customers, send store events, create tickets and answer the Commerce Contract.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": { ".": "./index.js" },
+  "engines": { "node": ">=18" },
+  "files": ["index.js", "README.md"],
+  "license": "MIT"
+}
