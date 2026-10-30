@@ -36,15 +36,22 @@
   .typing i:nth-child(2) { animation-delay: .15s } .typing i:nth-child(3) { animation-delay: .3s }
   @keyframes b { 0%, 80%, 100% { opacity: .3 } 40% { opacity: 1 } }
   .ft { display: flex; gap: 6px; padding: 10px; border-top: 1px solid #e2e8f0; align-items: center; background: #fff; }
-  .ft input[type=text] { flex: 1; border: 1px solid #cbd5e1; border-radius: 22px; padding: 10px 14px; font-size: 14px; outline: none; }
+  .ft input[type=text] { flex: 1; min-width: 0; width: 0; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none; }
   .ft input[type=text]:focus { border-color: var(--c); }
   .send { background: var(--c); color: #fff; border: 0; border-radius: 50%; width: 38px; height: 38px; cursor: pointer; font-size: 16px; }
-  .att { cursor: pointer; font-size: 19px; color: #64748b; padding: 0 4px; }
+  .att { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 40px; cursor: pointer; color: #475569; padding: 0; border: 0; background: transparent; }
   .ctx { font-size: 11px; color: #64748b; padding: 4px 12px 0; background: #fff; }
   .pw { font-size: 10px; text-align: center; color: #94a3b8; padding: 2px 0 8px; background: #fff; }
   .center { margin: auto; text-align: center; color: #64748b; font-size: 14px; padding: 24px; }
-  .mic { margin-left: auto; background: rgba(255,255,255,.2); border: 0; color: #fff; border-radius: 999px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
-  .mic + .x { margin-left: 4px; }
+  .mic { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex-shrink: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f1f5f9; color: #0f172a; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .mic:hover:not(:disabled) { background: #e2e8f0; }
+  .mic:disabled { color: #64748b; cursor: not-allowed; }
+  .voice-hint { margin: 0; padding: 0 12px 8px; font-size: 12px; color: #475569; }
+  .ft button:focus-visible { outline: 2px solid var(--c); outline-offset: 2px; }
+  .ft button:active { transform: translateY(1px); }
+  .send { flex-shrink: 0; display: grid; place-items: center; }
+  @media (max-width: 340px) { .ft { gap: 4px; padding: 8px; } .mic { gap: 4px; padding-inline: 7px; } .ft input[type=text] { padding-inline: 9px; } }
+  @media (prefers-reduced-motion: reduce) { .orb.live, .typing i { animation: none !important; } }
   .vc { position: absolute; inset: 0; background: #fff; display: none; flex-direction: column; z-index: 5; }
   .vc.on { display: flex; }
   .vc .orb { width: 96px; height: 96px; border-radius: 50%; background: var(--c); margin: 28px auto 8px; opacity: .85; transition: transform .2s; }
@@ -61,17 +68,19 @@
 <body>
 <div class="app">
   <div class="hd"><div class="av" id="av">S</div><div><b id="title">Chat</b><span id="sub">Replies in seconds · Hindi, Hinglish or English</span></div>
-    <button class="mic" id="mic" title="Talk to us" style="display:none">&#127908; Talk</button>
     <button class="x" id="close" title="Close" aria-label="Close" style="display:none">&#10005;</button></div>
-  <div class="vc" id="vc"><div class="orb" id="orb"></div><div class="st" id="vst">Connecting…</div><div class="lines" id="vlines"></div>
+  <div class="vc" id="vc" role="dialog" aria-label="Voice call"><div class="orb" id="orb" aria-hidden="true"></div><div class="st" id="vst" role="status">Connecting…</div><div class="lines" id="vlines" role="log" aria-label="Call transcript"></div>
     <button class="end" id="vend">End call</button></div>
   <div class="body" id="body"><div class="center">Connecting…</div></div>
   <div class="ctx" id="ctx" style="display:none"></div>
   <div class="ft" id="ft" style="display:none">
-    <label class="att" title="Attach a photo">&#128206;<input type="file" id="file" accept="image/*" style="display:none"></label>
-    <input type="text" id="input" placeholder="Type your message…" autocomplete="off">
-    <button class="send" id="send" aria-label="Send">&#10148;</button>
+    <button class="att" id="attach" type="button" title="Attach a photo" aria-label="Attach a photo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-9 9a6 6 0 0 1-8.5-8.5L13 2a4 4 0 0 1 5.7 5.7L9 17.4a2 2 0 0 1-2.8-2.8l8.9-8.9"/></svg></button>
+    <input type="file" id="file" accept="image/*" hidden>
+    <input type="text" id="input" aria-label="Your message" placeholder="Type your message…" autocomplete="off">
+    <button class="mic" id="mic" type="button" title="Start a voice call" aria-label="Talk to the assistant" aria-describedby="voice-hint" disabled><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>Talk</button>
+    <button class="send" id="send" aria-label="Send"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13"/></svg></button>
   </div>
+  <p class="voice-hint" id="voice-hint" role="status" hidden></p>
   <div class="pw">AI assistant · powered by Sahay</div>
 </div>
 <script>
@@ -184,7 +193,9 @@
         $('av').textContent = (j.config.agent_name || 'S').slice(0, 1).toUpperCase();
         $('sub').textContent = (j.config.agent_name || 'Assistant') + ' · replies in seconds · Hindi, Hinglish or English';
         $('ft').style.display = 'flex';
-        if (window.speechSynthesis && (window.SpeechRecognition || window.webkitSpeechRecognition)) $('mic').style.display = 'block';
+        var voiceSupported = !!(window.speechSynthesis && (window.SpeechRecognition || window.webkitSpeechRecognition));
+        $('mic').disabled = !voiceSupported;
+        if (!voiceSupported) { $('mic').title = 'Voice calls are unavailable in this browser'; $('voice-hint').hidden = false; $('voice-hint').textContent = 'For voice calls, open this shop in Chrome or Edge.'; }
         render([]); poll(); setInterval(poll, 2000); pushCart();
       })
       .catch(function (err) { body.innerHTML = '<div class="center">' + esc(err.message) + '</div>'; });
@@ -311,15 +322,18 @@
   function endCall() {
     V.live = false; try { V.rec && V.rec.abort(); } catch (e) {} speechSynthesis.cancel();
     if (V.id) api('/v1/widget/voice/end', { session: S.session, call_id: V.id }).catch(function () {});
-    V.id = null; $('vc').classList.remove('on'); S.lastSig = ''; poll();
+    V.id = null; $('vc').classList.remove('on'); $('mic').focus(); S.lastSig = ''; poll();
   }
   $('mic').onclick = function () {
-    $('vlines').innerHTML = ''; $('vc').classList.add('on'); vstate('Connecting…'); V.live = true;
+    if ($('mic').disabled || V.live) return;
+    $('vlines').innerHTML = ''; $('vc').classList.add('on'); $('vend').focus(); vstate('Connecting…'); V.live = true;
     api('/v1/widget/voice/start', { session: S.session }).then(function (r) {
       V.id = r.call_id; V.lang = r.lang || 'hi-IN'; vline('a', r.greeting); speak(r.greeting, listen);
     }).catch(function (e) { vstate(e.message); V.live = false; });
   };
   $('vend').onclick = endCall;
+
+  $('attach').onclick = function () { file.click(); };
 
   $('send').onclick = function () { var t = input.value; input.value = ''; send(t); };
   input.onkeydown = function (e) { if (e.key === 'Enter') { var t = input.value; input.value = ''; send(t); } };
