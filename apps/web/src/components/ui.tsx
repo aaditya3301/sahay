@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { AlertTriangle, CheckCircle2, Clock, Globe, Loader2, Mail, MessageCircle, MessagesSquare, Phone, ShieldAlert, UserRound, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock, Globe, Loader2, Mail, MessageCircle, MessagesSquare, Phone, ShieldAlert, UserRound, X, XCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { humanize, sentimentLabel } from '../lib/format'
 
@@ -7,14 +7,14 @@ export const cx = clsx
 
 export function Card({ children, className, title, action, pad = true }: { children: ReactNode; className?: string; title?: ReactNode; action?: ReactNode; pad?: boolean }) {
   return (
-    <div className={cx('rounded-xl border border-slate-200 bg-white shadow-sm', className)}>
+    <div className={cx('sahay-card rounded-xl border border-slate-200 bg-white', className)}>
       {(title || action) && (
-        <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
-          <div className="text-sm font-semibold text-slate-800">{title}</div>
+        <div className="sahay-card-header flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
+          <div className="sahay-card-title text-sm font-semibold text-slate-800">{title}</div>
           {action}
         </div>
       )}
-      <div className={pad ? 'p-4' : ''}>{children}</div>
+      <div className={cx('sahay-card-body', pad ? 'p-4' : 'sahay-card-body--flush')}>{children}</div>
     </div>
   )
 }
@@ -26,7 +26,7 @@ const tones: Record<string, string> = {
   amber: 'bg-amber-50 text-amber-800 ring-amber-200',
   orange: 'bg-orange-50 text-orange-700 ring-orange-200',
   red: 'bg-red-50 text-red-700 ring-red-200',
-  violet: 'bg-violet-50 text-violet-700 ring-violet-200',
+  violet: 'bg-blue-50 text-blue-700 ring-blue-200',
   brand: 'bg-brand-50 text-brand-700 ring-brand-100',
 }
 
@@ -39,7 +39,7 @@ export function Button({ children, onClick, variant = 'primary', size = 'md', di
   disabled?: boolean; loading?: boolean; className?: string; type?: 'button' | 'submit'; title?: string
 }) {
   const v = {
-    primary: 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm',
+    primary: 'bg-brand-600 text-white hover:bg-brand-700',
     secondary: 'bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50',
     ghost: 'text-slate-600 hover:bg-slate-100',
     danger: 'bg-red-600 text-white hover:bg-red-700',
@@ -47,7 +47,7 @@ export function Button({ children, onClick, variant = 'primary', size = 'md', di
   }[variant]
   return (
     <button type={type} title={title} onClick={onClick} disabled={disabled || loading}
-      className={cx('inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed',
+      className={cx('sahay-button', `sahay-button--${variant}`, size === 'sm' && 'sahay-button--sm', 'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed',
         size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-2 text-sm', v, className)}>
       {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{children}
     </button>
@@ -60,22 +60,22 @@ export function Spinner({ label }: { label?: string }) {
 
 export function Empty({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
-      <div className="text-slate-300">{icon}</div>
-      <div className="text-sm font-medium text-slate-700">{title}</div>
-      {children && <div className="max-w-md text-xs text-slate-500">{children}</div>}
+    <div className="sahay-empty flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+      {icon && <div className="sahay-empty-icon text-slate-300" aria-hidden="true">{icon}</div>}
+      <div className="sahay-empty-title text-sm font-medium text-slate-700">{title}</div>
+      {children && <div className="sahay-empty-copy max-w-md text-xs text-slate-500">{children}</div>}
     </div>
   )
 }
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="sahay-page-header mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+        <h1 className="sahay-page-title text-xl font-semibold tracking-tight text-slate-900">{title}</h1>
+        {subtitle && <p className="sahay-page-subtitle mt-0.5 text-sm text-slate-500">{subtitle}</p>}
       </div>
-      <div className="flex items-center gap-2">{actions}</div>
+      {actions && <div className="sahay-page-actions flex items-center gap-2">{actions}</div>}
     </div>
   )
 }
@@ -83,7 +83,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
 export function ChannelIcon({ channel, className = 'h-3.5 w-3.5' }: { channel?: string | null; className?: string }) {
   if (channel === 'whatsapp') return <MessageCircle className={cx(className, 'text-emerald-600')} />
   if (channel === 'email') return <Mail className={cx(className, 'text-sky-600')} />
-  if (channel === 'webchat') return <Globe className={cx(className, 'text-violet-600')} />
+  if (channel === 'webchat') return <Globe className={cx(className, 'text-brand-600')} />
   if (channel === 'sim') return <MessagesSquare className={cx(className, 'text-slate-500')} />
   if (channel === 'voice') return <Phone className={cx(className, 'text-amber-600')} />
   return <UserRound className={cx(className, 'text-slate-400')} />
@@ -113,7 +113,7 @@ export function UrgencyBadge({ urgency }: { urgency?: string | null }) {
 
 export function SentimentChip({ value }: { value?: number | null }) {
   const s = sentimentLabel(value)
-  return <Badge tone={s.tone} title={`Sentiment ${value?.toFixed(2) ?? ''}`}>{s.emoji} {s.label}</Badge>
+  return <Badge tone={s.tone} title={`Sentiment ${value?.toFixed(2) ?? ''}`}>{s.label}</Badge>
 }
 
 export function FrustrationBar({ value }: { value?: number | null }) {
@@ -129,9 +129,9 @@ export function FrustrationBar({ value }: { value?: number | null }) {
 
 export function Stat({ label, value, sub, icon }: { label: string; value: ReactNode; sub?: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between text-xs font-medium text-slate-500">{label}<span className="text-slate-400">{icon}</span></div>
-      <div className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-slate-900">{value}</div>
+    <div className="sahay-stat rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between text-xs font-medium text-slate-500">{label}<span className="sahay-stat-icon text-slate-400">{icon}</span></div>
+      <div className="sahay-stat-value mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-slate-900">{value}</div>
       {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
     </div>
   )
@@ -141,9 +141,9 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
-      <div className={cx('max-h-[90vh] w-full overflow-auto rounded-xl bg-white shadow-xl scroll-thin', wide ? 'max-w-3xl' : 'max-w-lg')} onClick={(e) => e.stopPropagation()}>
+      <div className={cx('sahay-modal-panel max-h-[90vh] w-full overflow-auto rounded-xl bg-white shadow-xl scroll-thin', wide ? 'max-w-3xl' : 'max-w-lg')} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b px-5 py-3"><div className="font-semibold">{title}</div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button></div>
+          <button type="button" aria-label="Close dialog" onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="h-5 w-5" /></button></div>
         <div className="p-5">{children}</div>
       </div>
     </div>
@@ -152,10 +152,10 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
 
 export function Tabs({ tabs, value, onChange }: { tabs: { id: string; label: ReactNode }[]; value: string; onChange: (id: string) => void }) {
   return (
-    <div className="flex gap-1 border-b border-slate-200">
+    <div className="sahay-tabs flex gap-1 border-b border-slate-200">
       {tabs.map((t) => (
-        <button key={t.id} onClick={() => onChange(t.id)}
-          className={cx('-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium', value === t.id ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>{t.label}</button>
+        <button key={t.id} type="button" onClick={() => onChange(t.id)} aria-pressed={value === t.id}
+          className={cx('sahay-tab -mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium', value === t.id ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>{t.label}</button>
       ))}
     </div>
   )
@@ -163,7 +163,7 @@ export function Tabs({ tabs, value, onChange }: { tabs: { id: string; label: Rea
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
   return (
-    <label className="block">
+    <label className="sahay-field block">
       <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-[11px] text-slate-400">{hint}</span>}
@@ -171,4 +171,4 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   )
 }
 
-export const inputCls = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100'
+export const inputCls = 'sahay-input w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100'

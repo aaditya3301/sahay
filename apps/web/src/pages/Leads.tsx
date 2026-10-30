@@ -30,7 +30,7 @@ export default function Leads() {
   const running = (data?.searches || []).filter((s: any) => s.status === 'running')
   return (
     <>
-      <PageHeader title="Leads" subtitle="Every prospect from the website chat, email links, WhatsApp, calls and outbound search — one pipeline."
+      <PageHeader title="Leads" subtitle="All your prospects in one pipeline."
         actions={<>
           <input className={inputCls + ' w-56'} placeholder="Search leads" value={q} onChange={(e) => setQ(e.target.value)} />
           <Button variant="secondary" onClick={() => setModal('import')}><Upload className="h-4 w-4" />Import CSV</Button>
@@ -265,7 +265,7 @@ function EmailDraft({ e, onDone }: { e: any; onDone: () => void }) {
         <div className="flex items-center gap-2">
           <Button variant="success" onClick={() => approve.mutate()} loading={approve.isPending}>Approve & send</Button>
           <Button variant="ghost" onClick={() => reject.mutate()} loading={reject.isPending}>Reject</Button>
-          <span className="text-[11px] text-slate-400">Sent via your email connection; recorded as "simulated" until Resend is connected.</span>
+          <span className="text-[11px] text-slate-400">Sent via your email connection; recorded as "simulated" until email (Brevo) is connected.</span>
         </div>
         {approve.isError && <div className="text-xs text-red-600">{(approve.error as Error).message}</div>}
       </div>

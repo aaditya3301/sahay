@@ -29,7 +29,7 @@ export default function Simulator() {
 
   return (
     <>
-      <PageHeader title="Customer simulator" subtitle="Be the customer on WhatsApp, email or web chat. Messages go through exactly the same intake path as the real channel webhooks." />
+      <PageHeader title="Test a conversation" subtitle="Try your agent as a customer." />
       <div className="grid gap-5 xl:grid-cols-[320px_1fr_340px]">
         <Card title="Who's messaging?">
           <div className="space-y-3">

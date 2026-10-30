@@ -19,10 +19,10 @@ export default function Approvals() {
   const sendDraft = useMutation({ mutationFn: (id: string) => api(`/v1/drafts/${id}/send`, { body: {} }), onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }) })
   return (
     <>
-      <PageHeader title="Approvals" subtitle="Everything the policy gate parked for a human. The same queue the owner answers from WhatsApp." />
+      <PageHeader title="Approvals" subtitle="Actions and replies waiting for approval." />
       <Card pad={false}>
         <div className="px-3 pt-1"><Tabs value={status} onChange={setStatus} tabs={[{ id: 'pending', label: 'Pending' }, { id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }]} /></div>
-        {isLoading ? <Spinner /> : !data?.length ? <Empty icon={<CheckSquare className="h-10 w-10" />} title="Nothing waiting">When the AI proposes something your rules don't allow automatically, it lands here.</Empty> : (
+        {isLoading ? <Spinner /> : !data?.length ? <Empty icon={<CheckSquare className="h-10 w-10" />} title="Nothing waiting">Actions that need your approval will appear here.</Empty> : (
           <div className="divide-y divide-slate-100">
             {data.map((a: any) => (
               <div key={a.id} className="grid grid-cols-[1fr_auto] gap-4 px-4 py-3">

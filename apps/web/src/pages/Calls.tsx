@@ -29,7 +29,7 @@ export default function Calls() {
   const rest = (data || []).filter((c: any) => c.status !== 'queued')
   return (
     <>
-      <PageHeader title="Calls" subtitle="Phone calls handled by the voice agent — same brain, tools and rules as chat. Every call lands on the customer's timeline."
+      <PageHeader title="Calls" subtitle="Your customer calls, in one place."
         actions={<Link to="/studio"><Button variant="secondary"><PhoneCall className="h-4 w-4" />Test a call in your browser</Button></Link>} />
       {isLoading ? <Spinner /> : (
         <div className="space-y-4">

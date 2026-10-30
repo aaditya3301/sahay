@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Eye, Mic, MicOff, Phone, PhoneOff, Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { Copy, Eye, Mic, MicOff, Phone, PhoneOff, Plus, RefreshCw, Send, Trash2, X } from 'lucide-react'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Badge, Button, Card, cx, Field, inputCls, PageHeader, Spinner, Tabs } from '../components/ui'
 import { api } from '../lib/api'
 import { humanize } from '../lib/format'
@@ -10,7 +10,7 @@ const copy = (t: string) => navigator.clipboard.writeText(t)
 
 function Code({ children }: { children: string }) {
   return (
-    <div className="relative">
+    <div className="setup-code relative">
       <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-10 text-[11px] leading-relaxed text-slate-100 scroll-thin">{children}</pre>
       <button title="Copy" onClick={() => copy(children)} className="absolute right-2 top-2 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"><Copy className="h-3.5 w-3.5" /></button>
     </div>
@@ -29,7 +29,10 @@ function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange
 export default function Studio() {
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['studio'], queryFn: () => api('/v1/studio') })
-  const [tab, setTab] = useState('persona')
+  const [params, setParams] = useSearchParams()
+  const selectedTab = params.get('tab') || 'persona'
+  const tab = ['persona', 'skills', 'widget', 'voice', 'playground'].includes(selectedTab) ? selectedTab : 'persona'
+  const setTab = (value: string) => setParams((previous) => { const next = new URLSearchParams(previous); next.set('tab', value); return next }, { replace: true })
   const [p, setP] = useState<any>(null)
   useEffect(() => { if (data) setP(data.profile) }, [data])
   const save = useMutation({
@@ -41,7 +44,7 @@ export default function Studio() {
   const saveAll = () => save.mutate({ agent_name: p.agent_name, persona: p.persona, skills: p.skills, custom_tools: p.custom_tools, sales: p.sales, voice: p.voice, widget: p.widget })
   return (
     <>
-      <PageHeader title="Agent Studio" subtitle={`One Agent Profile for ${data.tenant.name}: the website widget, Reply Now email chat, WhatsApp and phone calls all use it.`}
+      <PageHeader title="Agent Studio" subtitle="Your agent’s voice, skills and channels."
         actions={<>{save.isSuccess && <span className="text-xs text-emerald-700">Saved</span>}{save.isError && <span className="text-xs text-red-600">{(save.error as Error).message}</span>}
           <Button onClick={saveAll} loading={save.isPending}>Save changes</Button></>} />
       <Tabs value={tab} onChange={setTab} tabs={[
@@ -56,7 +59,7 @@ export default function Studio() {
         {tab === 'playground' && (
           <Card title="Playground" action={<a className="text-xs text-brand-700 underline" href={`/store/${data.site_key}`} target="_blank">Open on the demo storefront ↗</a>}>
             <p className="mb-3 text-sm text-slate-500">This is the exact widget your customers see, running against your live Agent Profile, knowledge and store data. Save changes first to test them.</p>
-            <iframe title="Widget playground" src={`${data.chat_url}?playground=1`} className="h-[600px] w-full max-w-md rounded-xl border border-slate-200 shadow-sm" />
+            <iframe title="Widget playground" src={`${data.chat_url}?playground=1`} className="h-[600px] w-full max-w-md rounded-xl border border-slate-200" />
           </Card>
         )}
       </div>
@@ -70,8 +73,8 @@ function PersonaTab({ p, setP, setIn, tenant }: { p: any; setP: (v: any) => void
     <div className="grid gap-4 lg:grid-cols-2">
       <Card title="Persona">
         <div className="space-y-3">
-          <Field label="Agent name" hint="How the AI introduces itself on chat and calls."><input className={inputCls} value={p.agent_name || ''} onChange={(e) => setP({ ...p, agent_name: e.target.value })} /></Field>
-          <Field label="Persona notes" hint="Anything extra about how it should behave: what to push, what to avoid, house phrases.">
+          <Field label="Agent name" hint="Used in chat and calls."><input className={inputCls} value={p.agent_name || ''} onChange={(e) => setP({ ...p, agent_name: e.target.value })} /></Field>
+          <Field label="Persona notes" hint="What to suggest, avoid or say.">
             <textarea className={inputCls} rows={5} value={p.persona || ''} onChange={(e) => setP({ ...p, persona: e.target.value })} placeholder="e.g. Always suggest the gift box for birthdays. Never compare us with other brands." />
           </Field>
           <Field label="Brand voice (from Settings)"><div className="rounded-lg bg-slate-50 p-2.5 text-sm text-slate-600">{tenant.brand_voice || '—'}</div></Field>
@@ -80,18 +83,23 @@ function PersonaTab({ p, setP, setIn, tenant }: { p: any; setP: (v: any) => void
       </Card>
       <Card title="Sales settings">
         <div className="space-y-3">
-          <Field label="Ideal customer (ICP)" hint="Used for lead finding and scoring."><textarea className={inputCls} rows={3} value={s.icp || ''} onChange={(e) => setIn('sales', 'icp', e.target.value)} placeholder="e.g. Corporate HR teams ordering festive gifts, boutique gift shops in metro cities" /></Field>
+          <Field label="Ideal customer" hint="Who you want to reach."><textarea className={inputCls} rows={3} value={s.icp || ''} onChange={(e) => setIn('sales', 'icp', e.target.value)} placeholder="e.g. Corporate HR teams ordering festive gifts, boutique gift shops in metro cities" /></Field>
           <Field label="What you offer leads"><input className={inputCls} value={s.offer || ''} onChange={(e) => setIn('sales', 'offer', e.target.value)} placeholder="e.g. Bulk gifting from 50 units with custom packaging" /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Booking link (optional)"><input className={inputCls} value={s.booking_url || ''} onChange={(e) => setIn('sales', 'booking_url', e.target.value)} placeholder="https://cal.com/…" /></Field>
             <Field label="Email sender name"><input className={inputCls} value={s.sender_name || ''} onChange={(e) => setIn('sales', 'sender_name', e.target.value)} placeholder={`Team ${tenant.name}`} /></Field>
-            <Field label="Follow up after (days)"><input type="number" className={inputCls} value={s.follow_up_days ?? 3} onChange={(e) => setIn('sales', 'follow_up_days', Number(e.target.value))} /></Field>
           </div>
-          <Toggle checked={s.capture_leads} onChange={(v) => setIn('sales', 'capture_leads', v)} label="Capture leads in chat" hint="When a visitor shows buying interest, the AI asks for name + phone/email and creates a lead." />
-          <Toggle checked={s.save_the_order} onChange={(v) => setIn('sales', 'save_the_order', v)} label="Save-the-order offers" hint="Before cancelling an unshipped order, offer one fix (faster delivery, swap, small coupon) — then cancel if they still want to." />
-          <Toggle checked={s.cart_reminders !== false} onChange={(v) => setIn('sales', 'cart_reminders', v)} label="Abandoned-cart reminders" hint="One gentle WhatsApp reminder when checkout is left without ordering." />
-          {s.cart_reminders !== false && <Field label="Remind after (hours)"><input type="number" min={1} className={inputCls} value={s.cart_reminder_hours ?? 1} onChange={(e) => setIn('sales', 'cart_reminder_hours', Number(e.target.value))} /></Field>}
-          <Toggle checked={s.newsletter !== false} onChange={(v) => setIn('sales', 'newsletter', v)} label="Monthly newsletter draft" hint="On the 1st, the AI drafts an email newsletter for your approval." />
+          <details className="dashboard-disclosure">
+            <summary>Sales preferences</summary>
+            <div className="space-y-4">
+              <Field label="Follow up after (days)"><input type="number" className={inputCls} value={s.follow_up_days ?? 3} onChange={(e) => setIn('sales', 'follow_up_days', Number(e.target.value))} /></Field>
+              <Toggle checked={s.capture_leads} onChange={(v) => setIn('sales', 'capture_leads', v)} label="Capture leads in chat" hint="Ask interested visitors for contact details." />
+              <Toggle checked={s.save_the_order} onChange={(v) => setIn('sales', 'save_the_order', v)} label="Save-the-order offers" hint="Offer an alternative before cancelling an unshipped order." />
+              <Toggle checked={s.cart_reminders !== false} onChange={(v) => setIn('sales', 'cart_reminders', v)} label="Abandoned-cart reminders" hint="Send one WhatsApp reminder after an abandoned checkout." />
+              {s.cart_reminders !== false && <Field label="Remind after (hours)"><input type="number" min={1} className={inputCls} value={s.cart_reminder_hours ?? 1} onChange={(e) => setIn('sales', 'cart_reminder_hours', Number(e.target.value))} /></Field>}
+              <Toggle checked={s.newsletter !== false} onChange={(v) => setIn('sales', 'newsletter', v)} label="Monthly newsletter draft" hint="Draft on the 1st of each month, for your approval." />
+            </div>
+          </details>
         </div>
       </Card>
     </div>
@@ -105,32 +113,39 @@ function SkillsTab({ p, setP }: { p: any; setP: (v: any) => void }) {
   const tools: any[] = p.custom_tools || []
   const setTool = (i: number, t: any) => setP({ ...p, custom_tools: tools.map((x, j) => (j === i ? t : x)) })
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card title="Skills">
-        <p className="mb-3 text-xs text-slate-500">The AI first picks a skill for each message; each skill limits which tools it may use. Turn off what this business doesn't need.</p>
+    <div className="studio-skills-layout">
+      <Card title="Agent skills">
+        <p className="setup-intro">Choose what your agent can help customers with.</p>
+        <div className="studio-skill-groups">
         {groups.map((g) => (
-          <div key={g} className="mb-4">
-            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{g}</div>
-            <div className="space-y-2">
+          <section key={g}>
+            <h2 className="studio-skill-group-title">{g === 'sales' ? 'Sales' : 'Customer support'}</h2>
+            <div className="studio-skill-list">
               {p.skill_catalog.filter((s: any) => s.group === g).map((s: any) => (
-                <label key={s.id} className={cx('flex items-start gap-2.5 rounded-lg border p-2.5', p.skills[s.id] ? 'border-brand-200 bg-brand-50/40' : 'border-slate-200')}>
+                <div key={s.id} className="studio-skill-row">
+                <label className="studio-skill-choice">
                   <input type="checkbox" className="mt-1" checked={!!p.skills[s.id]} onChange={(e) => setP({ ...p, skills: { ...p.skills, [s.id]: e.target.checked } })} />
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-slate-800">{s.label}</div>
                     <div className="text-xs text-slate-500">{s.description}</div>
-                    {s.tools.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{s.tools.map((t: string) => <Badge key={t}>{t}</Badge>)}</div>}
                   </div>
                 </label>
+                {s.tools.length > 0 && <details className="studio-skill-tools"><summary>Tools used</summary><div>{s.tools.map((t: string) => <Badge key={t}>{t}</Badge>)}</div></details>}
+                </div>
               ))}
             </div>
-          </div>
+          </section>
         ))}
+        </div>
       </Card>
+      <details className="connection-disclosure studio-custom-tools"><summary>Custom tools <span className="setup-summary-note">Optional · for your developer</span></summary><div>
       <Card title="Custom tools" action={<Button size="sm" variant="secondary" onClick={() => setP({ ...p, custom_tools: [...tools, { ...emptyTool }] })}><Plus className="h-3.5 w-3.5" />Add tool</Button>}>
-        <p className="mb-3 text-xs text-slate-500">Plug in your own API. The agent calls it live (POST JSON <code>{'{tool, args, customer}'}</code>), signed with your secret key in <code>X-Sahay-Signature</code>. HTTPS only.</p>
-        {!tools.length && <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-400">No custom tools yet — e.g. "check_delivery_pincode" or "get_bulk_quote".</div>}
+        <p className="setup-intro">Connect an extra service your business uses. Requests use HTTPS and your signing key.</p>
+        <details className="dashboard-disclosure"><summary>Request format</summary><p className="setup-help">POST JSON <code>{'{tool, args, customer}'}</code>, signed in <code>X-Sahay-Signature</code>.</p></details>
+        {!tools.length && <p className="setup-help">No custom tools added.</p>}
         <div className="space-y-3">{tools.map((t, i) => <ToolEditor key={i} t={t} onChange={(v) => setTool(i, v)} onRemove={() => setP({ ...p, custom_tools: tools.filter((_, j) => j !== i) })} />)}</div>
       </Card>
+      </div></details>
     </div>
   )
 }
@@ -162,7 +177,7 @@ function ToolEditor({ t, onChange, onRemove }: { t: any; onChange: (v: any) => v
             <select className={inputCls + ' w-24'} value={pa.type || 'string'} onChange={(e) => setParam(i, 'type', e.target.value)}><option>string</option><option>number</option><option>boolean</option></select>
             <input className={inputCls} placeholder="description" value={pa.description || ''} onChange={(e) => setParam(i, 'description', e.target.value)} />
             <label className="flex items-center gap-1 text-[11px]"><input type="checkbox" checked={!!pa.required} onChange={(e) => setParam(i, 'required', e.target.checked)} />req</label>
-            <button className="text-slate-400 hover:text-red-600" onClick={() => set('parameters', params.filter((_, j) => j !== i))}>✕</button>
+            <button type="button" aria-label={`Remove parameter ${pa.name || i + 1}`} className="text-slate-400 hover:text-red-600" onClick={() => set('parameters', params.filter((_, j) => j !== i))}><X size={16} /></button>
           </div>
         ))}
         <Button size="sm" variant="ghost" onClick={() => set('parameters', [...params, { name: '', type: 'string', description: '', required: false }])}><Plus className="h-3 w-3" />Parameter</Button>
@@ -253,7 +268,7 @@ function VoiceTab({ p, setIn, data }: { p: any; setIn: (k: string, f: string, v:
   return (
     <div className="space-y-4">
     <VoiceProvider provider={v.provider || 'livekit'} onProvider={(x) => setIn('voice', 'provider', x)} />
-    <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+    <div className="studio-voice-layout">
       <div className="space-y-4">
         <Card title="Voice settings">
           <div className="space-y-3">
@@ -270,7 +285,7 @@ function VoiceTab({ p, setIn, data }: { p: any; setIn: (k: string, f: string, v:
             <Toggle checked={v.cod_calls} onChange={(x) => setIn('voice', 'cod_calls', x)} label="Call COD customers to confirm before shipping" hint="In addition to the WhatsApp confirmation." />
           </div>
         </Card>
-        <Card title="Voice API (for Naaradh)">
+        <details className="connection-disclosure"><summary>Voice API for your developer</summary><div><Card title="Voice API (for Naaradh)">
           <p className="mb-2 text-xs text-slate-500">Header <code>X-Sahay-Key: &lt;secret key&gt;</code>. Same skills, tools and policy rules as chat.</p>
           <Code>{`POST ${base}/v1/voice/calls/start   {direction, from_number, to_number, purpose?, call_id?}
   → {call_id, greeting, system_prompt, tools, context}
@@ -278,7 +293,7 @@ POST ${base}/v1/voice/calls/{id}/turn  {text}        → {say, end_call, transfe
 POST ${base}/v1/voice/calls/{id}/tool  {name, args}  → tool result (policy-gated)
 POST ${base}/v1/voice/calls/{id}/end   {transcript?} → {summary, outcome, next_step}
 GET  ${base}/v1/voice/tasks                          → due outbound calls`}</Code>
-        </Card>
+        </Card></div></details>
       </div>
       <TestCall />
     </div>
@@ -313,7 +328,7 @@ function VoiceProvider({ provider, onProvider }: { provider: string; onProvider:
   return (
     <Card title="Phone provider" action={provider === 'livekit' ? null : allOk ? <Badge tone="green">Sarvam connected</Badge> : <Badge tone="amber">not connected</Badge>}>
       <div className="mb-3 flex flex-wrap gap-2">
-        {[['livekit', 'Sarvam voice on LiveKit (recommended)'], ['sarvam', 'Sarvam Voice Agents'], ['naaradh', 'Your own pipeline (Naaradh API)']].map(([id, label]) => (
+        {[['livekit', 'Sarvam on LiveKit (recommended)'], ['sarvam', 'Sarvam Voice Agents'], ['naaradh', 'Custom voice service']].map(([id, label]) => (
           <button key={id} onClick={() => onProvider(id)} className={cx('rounded-lg border px-3 py-1.5 text-sm', provider === id ? 'border-brand-500 bg-brand-50 font-medium text-brand-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}>{label}</button>
         ))}
         <span className="self-center text-[11px] text-slate-400">Save the choice with "Save changes" at the top.</span>
@@ -321,23 +336,22 @@ function VoiceProvider({ provider, onProvider }: { provider: string; onProvider:
       {provider === 'livekit' ? <LiveKitSetup /> : provider !== 'sarvam' ? (
         <p className="text-sm text-slate-600">Your pipeline calls our Voice API below (start → turn/tool → end) with your secret key, and we POST due outbound calls to the webhook you set. Same brain, tools and rules.</p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.3fr]">
+        <div className="voice-provider-layout">
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">Sarvam rents the phone line and does the listening and speaking (Hindi / Hinglish built in). We stay the brain: your data, tools, rules and the customer timeline. About ₹3–3.5 per minute plus telephony; browser test calls below are free.</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className="setup-intro">Connect your phone service using the details from your Sarvam account. Your agent keeps the same knowledge and business rules.</p>
+            <div className="voice-credentials-grid">
               {SARVAM_FIELDS.map(([k, label, hint]) => (
-                <Field key={k} label={label} hint={hint}>
-                  <input className={inputCls} type={k === 'api_key' ? 'password' : 'text'} value={cfg[k] || ''}
+                <Field key={k} label={label} hint={`${hint}${connected[k] ? ' · Saved' : ''}`}>
+                  <input name={`sarvam-${k}`} autoComplete={k === 'api_key' ? 'new-password' : 'off'} className={inputCls} type={k === 'api_key' ? 'password' : 'text'} value={cfg[k] || ''}
                     placeholder={k === 'api_key' && connected.api_key ? '•••• saved' : ''} onChange={(e) => setCfg({ ...cfg, [k]: e.target.value })} />
                 </Field>
               ))}
             </div>
-            <div className="flex flex-wrap gap-1.5">{SARVAM_FIELDS.map(([k, label]) => <Badge key={k} tone={connected[k] ? 'green' : 'slate'}>{connected[k] ? '✓' : '○'} {label}</Badge>)}</div>
             <Button size="sm" onClick={() => save.mutate()} loading={save.isPending}>Save Sarvam connection</Button>
             {save.isError && <div className="text-xs text-red-600">{(save.error as Error).message}</div>}
             {save.isSuccess && <div className="text-xs text-emerald-700">Saved (keys are stored encrypted).</div>}
           </div>
-          <SarvamSetup data={data} phone={phone} setPhone={setPhone} test={test} />
+          <details className="connection-disclosure"><summary>Provider setup guide <span className="setup-summary-note">For you or your developer</span></summary><div><SarvamSetup data={data} phone={phone} setPhone={setPhone} test={test} /></div></details>
         </div>
       )}
     </Card>
@@ -390,7 +404,7 @@ function SarvamSetup({ data, phone, setPhone, test }: { data: any; phone: string
   return (
     <div className="space-y-3 rounded-lg border border-slate-100 bg-slate-50/60 p-3">
       <div className="text-sm font-semibold">Set up the Sarvam agent (one time)</div>
-      <Step n={1} title="Get a number">Rent one in Sarvam (₹59 / 30 days) or connect Exotel / Plivo / Vobiz. Indian numbers can need business verification, so do this a few days early.</Step>
+      <Step n={1} title="Get a number">Rent or connect a phone number in Sarvam and complete any business verification requested by your provider. Check call charges in your provider account.</Step>
       <Step n={2} title="Create an agent and paste this prompt"><Code>{data.prompt}</Code></Step>
       <Step n={3} title="Add these agent variables">
         <div className="flex flex-wrap gap-1">{(data.variables || []).map((x: string) => <code key={x} className="rounded bg-white px-1.5 py-0.5 ring-1 ring-slate-200">{x}</code>)}</div>
@@ -476,7 +490,7 @@ function TestCall() {
       const r = await api(`/v1/voice/test/${callRef.current.call_id}/turn`, { body: { text } })
       clearTimeout(filler)
       window.speechSynthesis?.cancel()
-      const notes = [...(r.whatsapp_sent || []).map((t: string) => `📲 Sent on WhatsApp: ${t}`), ...(r.transfer_to ? [`☎ Transfer to ${r.transfer_to}`] : [])]
+      const notes = [...(r.whatsapp_sent || []).map((t: string) => `Sent on WhatsApp: ${t}`), ...(r.transfer_to ? [`Transfer to ${r.transfer_to}`] : [])]
       setLines((l) => [...l, { role: 'agent', text: r.say, tools: (r.tools_used || []).map((u: any) => u.tool), notes }])
       await speak(r.say)
       if (r.end_call) { await end(); return }

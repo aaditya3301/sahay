@@ -10,7 +10,7 @@ import { api } from '../lib/api'
 import { humanize, time } from '../lib/format'
 
 // Chart roles from the dataviz reference palette (light)
-const C = { s1: '#2a78d6', s2: '#eb6834', grid: '#e7e5e4', axis: '#78716c', text: '#52514e' }
+const C = { s1: '#226192', s2: '#ef8557', grid: '#e8e5de', axis: '#58646a', text: '#17394e' }
 const axisProps = { stroke: C.axis, fontSize: 11, tickLine: false, axisLine: { stroke: C.grid } }
 
 function Tip({ active, payload, label, fmt }: any) {
@@ -31,7 +31,7 @@ export default function Insights() {
   const byDay = m.by_day.map((d: any) => ({ ...d, label: new Date(d.day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), other: d.n - d.ai_auto }))
   return (
     <>
-      <PageHeader title="Insights" subtitle="What customers are telling you, and what Sahay did about it."
+      <PageHeader title="Insights" subtitle="Customer trends and your agent’s impact."
         actions={<div className="w-72 whitespace-nowrap"><Tabs value={days} onChange={setDays} tabs={[{ id: '7', label: '7 days' }, { id: '14', label: '14 days' }, { id: '30', label: '30 days' }]} /></div>} />
       <div className="mb-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="Tickets" value={m.total} sub={`${m.resolved} resolved`} icon={<TrendingUp className="h-4 w-4" />} />
@@ -84,7 +84,7 @@ export default function Insights() {
           </ResponsiveContainer>
         </Card>
         <Card title="Customers at risk (high frustration, unresolved)">
-          {!m.at_risk.length ? <div className="text-sm text-slate-400">No one at risk right now 🎉</div> : (
+          {!m.at_risk.length ? <div className="text-sm text-slate-400">No customers at risk right now.</div> : (
             <div className="space-y-2">{m.at_risk.map((t: any) => (
               <Link key={t.id} to={`/tickets/${t.id}`} className="block rounded-lg border border-slate-100 p-2 hover:bg-slate-50">
                 <div className="flex items-center justify-between text-sm"><span className="font-medium">{t.display_name}</span><FrustrationBar value={t.frustration_score} /></div>
