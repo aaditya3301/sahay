@@ -1,0 +1,172 @@
+"""Channel adapters: intake parsing + reply dispatch.
+
+Each tenant's channel credentials live in `integrations` (kind = whatsapp | email). When a channel
+isn't configured, replies are recorded with status 'simulated' and show up in the in-app
+customer/owner simulator, so the full flow works before Meta/Resend are set up.
+"""
+
+import hashlib
+import hmac
+import logging
+
+import httpx
+
+from app.config import settings
+from app.core import inr, norm_phone
+
+log = logging.getLogger("sahay.channels")
+
+
+async def integration(db, kind: str) -> dict:
+    from app.core import unseal
+
+    row = await db.one("SELECT config FROM integrations WHERE kind=:k AND status='active'", k=kind)
+    return unseal((row or {}).get("config") or {})
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp Cloud API
+# ---------------------------------------------------------------------------
+def verify_meta_signature(body: bytes, header: str | None) -> bool:
+    if not settings.whatsapp_app_secret:
+        return True  # not configured (dev)
+    if not header:
+        return False
+    expected = "sha256=" + hmac.new(settings.whatsapp_app_secret.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, header)
+
+
+async def wa_send(cfg: dict, to: str, payload: dict) -> str | None:
+    url = f"https://graph.facebook.com/{settings.whatsapp_graph_version}/{cfg['phone_number_id']}/messages"
+    body = {"messaging_product": "whatsapp", "to": to.lstrip("+"), **payload}
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.post(url, json=body, headers={"Authorization": f"Bearer {cfg['access_token']}"})
+        if r.status_code >= 300:
+            log.warning("whatsapp send failed: %s %s", r.status_code, r.text[:300])
+            r.raise_for_status()
+        return r.json().get("messages", [{}])[0].get("id")
+
+
+async def wa_download_media(cfg: dict, media_id: str) -> tuple[bytes, str]:
+    async with httpx.AsyncClient(timeout=30) as c:
+        h = {"Authorization": f"Bearer {cfg['access_token']}"}
+        meta = (await c.get(f"https://graph.facebook.com/{settings.whatsapp_graph_version}/{media_id}", headers=h)).json()
+        data = (await c.get(meta["url"], headers=h)).content
+        return data, meta.get("mime_type", "application/octet-stream")
+
+
+def wa_interactive_buttons(text: str, buttons: list[tuple[str, str]]) -> dict:
+    return {"type": "interactive", "interactive": {
+        "type": "button", "body": {"text": text[:1024]},
+        "action": {"buttons": [{"type": "reply", "reply": {"id": bid[:256], "title": title[:20]}} for bid, title in buttons[:3]]},
+    }}
+
+
+# ---------------------------------------------------------------------------
+# Email (Resend)
+# ---------------------------------------------------------------------------
+async def email_send(cfg: dict, to: str, subject: str, text: str, in_reply_to: str | None) -> str | None:
+    key = cfg.get("api_key") or settings.resend_api_key
+    sender = cfg.get("from") or settings.email_from
+    headers = {"In-Reply-To": in_reply_to, "References": in_reply_to} if in_reply_to else {}
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {key}"},
+            json={"from": sender, "to": [to], "subject": subject, "text": text, "headers": headers,
+                  "reply_to": cfg.get("reply_to") or sender},
+        )
+        r.raise_for_status()
+        return r.json().get("id")
+
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+async def send_to_customer(db, conversation: dict, text: str, ticket_id=None, author_type: str = "ai",
+                           author_name: str | None = None, interactive: dict | None = None, subject: str | None = None) -> dict:
+    """Store the outbound message and deliver it on the conversation's channel."""
+    channel = conversation["channel"]
+    status, external_id = "sent", None
+    customer = await db.one("SELECT * FROM customers WHERE id=:c", c=conversation["customer_id"])
+    try:
+        if channel == "whatsapp":
+            cfg = await integration(db, "whatsapp")
+            if cfg.get("access_token") and cfg.get("phone_number_id"):
+                to = customer["primary_phone"]
+                payload = (wa_interactive_buttons(text, [(b["id"], b["title"]) for b in interactive["buttons"]]) if interactive and interactive.get("buttons")
+                           else {"type": "text", "text": {"body": text[:4096]}})
+                external_id = await wa_send(cfg, to, payload)
+            else:
+                status = "simulated"
+        elif channel == "email":
+            cfg = await integration(db, "email")
+            if (cfg.get("api_key") or settings.resend_api_key) and (cfg.get("from") or settings.email_from):
+                last_in = await db.one(
+                    "SELECT external_id FROM messages WHERE conversation_id=:c AND direction='in' ORDER BY created_at DESC LIMIT 1",
+                    c=conversation["id"],
+                )
+                tsubject = await db.val("SELECT subject FROM tickets WHERE id=:t", t=ticket_id) if ticket_id else None
+                external_id = await email_send(cfg, customer["primary_email"], subject or f"Re: {tsubject or 'your request'}", text,
+                                               None if subject else (last_in or {}).get("external_id"))
+            else:
+                status = "simulated"
+        else:  # webchat / sim: the widget/simulator polls our API
+            status = "sent"
+    except Exception as e:
+        log.exception("dispatch failed")
+        status = "failed"
+        text = text + f"\n\n[delivery failed: {str(e)[:120]}]"
+    row = await db.one(
+        "INSERT INTO messages (tenant_id, conversation_id, ticket_id, customer_id, direction, channel, author_type, author_name, "
+        "text, external_id, status, interactive) VALUES (:t,:c,:tk,:cu,'out',:ch,:at,:an,:tx,:ex,:st,:ia) RETURNING *",
+        t=db.tenant_id, c=conversation["id"], tk=ticket_id, cu=conversation["customer_id"], ch=channel, at=author_type,
+        an=author_name, tx=text, ex=external_id, st=status, ia=interactive,
+    )
+    await db.exec("UPDATE conversations SET last_outbound_at=now() WHERE id=:c", c=conversation["id"])
+    if ticket_id:
+        await db.exec("UPDATE tickets SET first_response_at=coalesce(first_response_at, now()), updated_at=now() WHERE id=:t", t=ticket_id)
+    return row
+
+
+async def notify_owner_approval(tenant_id: str, approval_id: str) -> None:
+    """Send an approval request to the owner's WhatsApp (or the simulated owner phone)."""
+    from app.approvals import approval_token
+    from app.db import tenant_session
+
+    async with tenant_session(tenant_id) as db:
+        s = await db.one("SELECT owner_phone, owner_wa_approvals FROM tenant_settings")
+        ap = await db.one(
+            "SELECT a.*, t.number, c.display_name FROM approvals a JOIN tickets t ON t.id=a.ticket_id "
+            "JOIN customers c ON c.id=t.customer_id WHERE a.id=:id", id=approval_id,
+        )
+        if not s or not s["owner_wa_approvals"] or not ap:
+            return
+        text = f"🔔 Approval needed · Ticket #{ap['number']}\n{ap['summary']}\n{ap['suggestion'] or ''}"
+        buttons = [(approval_token(approval_id, "approve"), "Approve"), (approval_token(approval_id, "reject"), "Reject")]
+        cfg = await integration(db, "whatsapp")
+        sent_via = "simulated"
+        if cfg.get("access_token") and s["owner_phone"]:
+            try:
+                await wa_send(cfg, norm_phone(s["owner_phone"]), wa_interactive_buttons(text, buttons))
+                sent_via = "whatsapp"
+            except Exception:
+                log.exception("owner WA notify failed")
+        await db.exec(
+            "INSERT INTO audit_log (tenant_id, actor_type, verb, object_type, object_id, data) VALUES (:t,'system','owner.notified','approval',:id,:d)",
+            t=tenant_id, id=approval_id, d={"via": sent_via, "text": text},
+        )
+
+
+def owner_message_preview(ap: dict) -> dict:
+    from app.approvals import approval_token
+
+    return {
+        "approval_id": str(ap["id"]),
+        "text": f"🔔 Approval needed · Ticket #{ap.get('number')}\n{ap['summary']}\n{ap.get('suggestion') or ''}",
+        "buttons": [{"id": approval_token(str(ap["id"]), "approve"), "title": "Approve"},
+                    {"id": approval_token(str(ap["id"]), "reject"), "title": "Reject"}],
+        "status": ap["status"],
+        "created_at": ap["created_at"],
+        "value": inr(ap.get("value_paise")) if ap.get("value_paise") else None,
+    }
