@@ -24,7 +24,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   else if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.body) }
   else if (opts.method && opts.method !== 'GET') { headers['Content-Type'] = 'application/json'; body = '{}' } // Cloud Run's frontend requires a length on writes
   const r = await fetch(path, { method: opts.method || (body ? 'POST' : 'GET'), headers, body })
-  if (r.status === 401) { auth.clear(); location.href = '/login'; throw new ApiError(401, 'Signed out') }
+  if (r.status === 401 && !path.startsWith('/v1/auth/')) { auth.clear(); location.href = '/login'; throw new ApiError(401, 'Signed out') }
   const text = await r.text()
   const data = text ? (() => { try { return JSON.parse(text) } catch { return text } })() : null
   if (!r.ok) throw new ApiError(r.status, (data && (data.detail || data.message)) || r.statusText)
