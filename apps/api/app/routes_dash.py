@@ -563,7 +563,7 @@ async def get_settings(ctx: Ctx = CtxDep):
     for i in integ:  # never send secrets back
         i["config"] = {k: ("••••" if any(x in k for x in ("token", "key", "secret")) and v else v) for k, v in (i["config"] or {}).items()}
     return jsonable({"settings": s, "integrations": integ, "routes": routes, "public_base_url": settings.public_base_url,
-                     "inbound_email_domain": settings.inbound_email_domain})
+                     "inbound_email_domain": settings.inbound_email_domain, "platform_email": bool(settings.brevo_api_key and settings.email_from)})
 
 
 SETTABLE = {"brand_voice", "business_description", "website_url", "default_autonomy", "owner_phone", "owner_wa_approvals",

@@ -2,12 +2,13 @@
 
 Each tenant's channel credentials live in `integrations` (kind = whatsapp | email). When a channel
 isn't configured, replies are recorded with status 'simulated' and show up in the in-app
-customer/owner simulator, so the full flow works before Meta/Resend are set up.
+customer/owner simulator, so the full flow works before Meta/Brevo are set up.
 """
 
 import hashlib
 import hmac
 import logging
+import re
 
 import httpx
 
@@ -63,21 +64,74 @@ def wa_interactive_buttons(text: str, buttons: list[tuple[str, str]]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Email (Resend)
+# Email: Brevo transactional API (a business's key, or the platform's). Businesses that saved a Resend key earlier
+# keep sending through Resend; the key's prefix tells them apart (Brevo keys start with xkeysib-).
 # ---------------------------------------------------------------------------
-async def email_send(cfg: dict, to: str, subject: str, text: str, in_reply_to: str | None) -> str | None:
-    key = cfg.get("api_key") or settings.resend_api_key
-    sender = cfg.get("from") or settings.email_from
-    headers = {"In-Reply-To": in_reply_to, "References": in_reply_to} if in_reply_to else {}
+BREVO_SEND = "https://api.brevo.com/v3/smtp/email"
+
+
+def email_key(cfg: dict) -> tuple[str, str] | None:
+    """(provider, api_key) for sending, or None while email is simulated."""
+    if key := cfg.get("api_key"):
+        return ("resend", key) if key.startswith("re_") else ("brevo", key)
+    if settings.brevo_api_key:
+        return "brevo", settings.brevo_api_key
+    if settings.resend_api_key:
+        return "resend", settings.resend_api_key
+    return None
+
+
+def email_ready(cfg: dict) -> bool:
+    return bool(email_key(cfg) and (cfg.get("from") or settings.email_from))
+
+
+def _mailbox(addr: str) -> dict:
+    """'Loop Loot <help@looploot.in>' → {"name": "Loop Loot", "email": "help@looploot.in"}"""
+    name, _, email = addr.rpartition("<")
+    if not email:
+        return {"email": addr.strip()}
+    out = {"email": email.rstrip(">").strip()}
+    if name.strip().strip('"'):
+        out["name"] = name.strip().strip('"')[:70]
+    return out
+
+
+def _html(text: str) -> str:
+    import html
+
+    return "<div style=\"font-family:Arial,sans-serif;font-size:14px;line-height:1.5\">" + html.escape(text).replace("\n", "<br>") + "</div>"
+
+
+async def email_send(cfg: dict, to: str, subject: str, text: str, in_reply_to: str | None = None,
+                     sender: str | None = None, reply_to: str | None = None, tenant_id: str | None = None) -> str | None:
+    """Send one plain-text email; returns the provider's message id (Brevo's is the SMTP Message-ID, which replies quote)."""
+    provider, key = email_key(cfg) or (None, None)
+    sender = sender or cfg.get("from") or settings.email_from
+    if not key or not sender:
+        raise RuntimeError("email isn't connected")
+    reply_to = reply_to or cfg.get("reply_to") or sender
+    thread = {"In-Reply-To": in_reply_to, "References": in_reply_to} if in_reply_to else {}
     async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {key}"},
-            json={"from": sender, "to": [to], "subject": subject, "text": text, "headers": headers,
-                  "reply_to": cfg.get("reply_to") or sender},
-        )
+        if provider == "brevo":
+            r = await c.post(BREVO_SEND, headers={"api-key": key, "accept": "application/json"}, json={
+                "sender": _mailbox(sender), "to": [{"email": to}], "subject": subject[:250], "textContent": text, "htmlContent": _html(text),
+                "replyTo": _mailbox(reply_to), **({"headers": thread} if thread else {}), "tags": ["sahay"] + ([f"t:{tenant_id}"] if tenant_id else [])})  # Brevo echoes tags on delivery events
+            if r.status_code >= 300:
+                log.warning("brevo send failed: %s %s", r.status_code, r.text[:300])
+                r.raise_for_status()
+            return r.json().get("messageId")
+        r = await c.post("https://api.resend.com/emails", headers={"Authorization": f"Bearer {key}"},
+                         json={"from": sender, "to": [to], "subject": subject, "text": text, "headers": thread, "reply_to": reply_to})
         r.raise_for_status()
         return r.json().get("id")
+
+
+async def inbound_address(tenant_id: str) -> str | None:
+    """Where this business receives email (customers' replies come back here and become tickets)."""
+    from app.db import system_session
+
+    async with system_session() as db:
+        return await db.val("SELECT external_key FROM channel_routes WHERE channel='email' AND tenant_id=:t ORDER BY external_key LIMIT 1", t=tenant_id)
 
 
 # ---------------------------------------------------------------------------
@@ -100,15 +154,19 @@ async def send_to_customer(db, conversation: dict, text: str, ticket_id=None, au
             else:
                 status = "simulated"
         elif channel == "email":
+            # inbound emails reach the model as "Subject: …\n\nbody", and drafts sometimes copy that first line
+            text = re.sub(r"\A\s*Subject:[^\n]*\n+", "", text)
             cfg = await integration(db, "email")
-            if (cfg.get("api_key") or settings.resend_api_key) and (cfg.get("from") or settings.email_from):
+            if email_ready(cfg):
                 last_in = await db.one(
                     "SELECT external_id FROM messages WHERE conversation_id=:c AND direction='in' ORDER BY created_at DESC LIMIT 1",
                     c=conversation["id"],
                 )
                 tsubject = await db.val("SELECT subject FROM tickets WHERE id=:t", t=ticket_id) if ticket_id else None
                 external_id = await email_send(cfg, customer["primary_email"], subject or f"Re: {tsubject or 'your request'}", text,
-                                               None if subject else (last_in or {}).get("external_id"))
+                                               None if subject else (last_in or {}).get("external_id"),
+                                               reply_to=cfg.get("reply_to") or cfg.get("inbound_address") or await inbound_address(db.tenant_id),
+                                               tenant_id=db.tenant_id)
             else:
                 status = "simulated"
         else:  # webchat / sim: the widget/simulator polls our API

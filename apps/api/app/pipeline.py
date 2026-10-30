@@ -166,6 +166,9 @@ async def ingest(tenant_id: str, msg: InboundMessage) -> dict | None:
         conv = None
         if msg.thread_id:
             conv = await db.one("SELECT * FROM conversations WHERE channel=:c AND external_thread_id=:t", c=msg.channel, t=msg.thread_id)
+            if not conv:  # a reply to one of our emails quotes its Message-ID
+                conv = await db.one("SELECT c.* FROM messages m JOIN conversations c ON c.id=m.conversation_id "
+                                    "WHERE m.channel=:c AND m.external_id=:t AND m.direction='out' LIMIT 1", c=msg.channel, t=msg.thread_id)
         if not conv:
             conv = await db.one(
                 "SELECT * FROM conversations WHERE channel=:c AND customer_id=:cu ORDER BY created_at DESC LIMIT 1",

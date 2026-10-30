@@ -67,10 +67,12 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str = ""
     whatsapp_app_secret: str = ""
     whatsapp_graph_version: str = "v23.0"
-    resend_api_key: str = ""
+    brevo_api_key: str = ""  # platform default; a business's own key in Settings → Email wins
+    resend_api_key: str = ""  # legacy sender, still honoured
     resend_webhook_secret: str = ""
-    email_from: str = ""
-    inbound_email_domain: str = ""
+    email_from: str = ""  # "Sahay <support@yourdomain.com>": a sender verified in Brevo
+    inbound_email_domain: str = ""  # Brevo inbound parsing domain (MX → inbound1/2.sendinblue.com), e.g. reply.yourdomain.com
+    email_webhook_token: str = ""  # Brevo sends it as "Authorization: Bearer ..." on our email webhooks
 
     # Optional third parties
     firecrawl_api_key: str = ""
@@ -79,6 +81,14 @@ class Settings(BaseSettings):
     cron_secret: str = ""
     # Platform key for the voice pipeline when it routes calls by dialled number (per-business keys also work)
     voice_platform_key: str = ""
+    # LiveKit + Sarvam voice agent (voice_agent.py runs as a LiveKit worker; voice_livekit.py is the API side)
+    livekit_url: str = ""  # wss://<project>.livekit.cloud
+    livekit_api_key: str = ""
+    livekit_api_secret: str = ""
+    livekit_agent_name: str = "sahay-voice"
+    livekit_sip_trunk_id: str = ""  # outbound trunk for real phone calls (ST_...)
+    sarvam_api_key: str = ""  # platform key; a business's own key in Integrations → Sarvam wins
+    voice_api_url: str = ""  # where the worker reaches this API (default http://127.0.0.1:$PORT)
     # Optional Cloudflare Turnstile for the widget (free). Without it the widget uses a built-in proof-of-work check.
     turnstile_site_key: str = ""
     turnstile_secret: str = ""

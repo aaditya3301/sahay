@@ -78,13 +78,13 @@ function Integrations({ data, integ }: { data: any; integ: (k: string) => any })
           <Button size="sm" variant="secondary" className="mt-2" onClick={() => save.mutate({ kind: 'whatsapp', body: wa })}>Save WhatsApp</Button>
         </div>
         <div>
-          <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold">Email (Resend) {integ('email').api_key ? <Badge tone="green">connected</Badge> : <Badge>simulated</Badge>}</div>
+          <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold">Email (Brevo) {integ('email').api_key || data?.platform_email ? <Badge tone="green">connected</Badge> : <Badge>simulated</Badge>}</div>
           <div className="grid grid-cols-3 gap-2">
-            <input className={inputCls} placeholder="Inbound address" value={em.inbound_address} onChange={(e) => setEm({ ...em, inbound_address: e.target.value })} />
-            <input className={inputCls} placeholder="From address" value={em.from} onChange={(e) => setEm({ ...em, from: e.target.value })} />
-            <input className={inputCls} placeholder="Resend API key" value={em.api_key} onChange={(e) => setEm({ ...em, api_key: e.target.value })} />
+            <input className={inputCls} placeholder="Inbound address (slug@reply.yourdomain.com)" value={em.inbound_address} onChange={(e) => setEm({ ...em, inbound_address: e.target.value })} />
+            <input className={inputCls} placeholder="From: Brand <help@yourdomain.com> (verified in Brevo)" value={em.from} onChange={(e) => setEm({ ...em, from: e.target.value })} />
+            <input className={inputCls} type="password" placeholder="Brevo API key (xkeysib-…)" value={em.api_key} onChange={(e) => setEm({ ...em, api_key: e.target.value })} />
           </div>
-          <div className="mt-1 text-[11px] text-slate-400">Inbound webhook: {location.origin}/webhooks/email</div>
+          <div className="mt-1 text-[11px] text-slate-400">Brevo webhooks: inbound parsing → {location.origin}/webhooks/email · transactional events → {location.origin}/webhooks/email/events. Leave the key empty to use the platform's Brevo account.</div>
           <Button size="sm" variant="secondary" className="mt-2" onClick={() => save.mutate({ kind: 'email', body: em })}>Save email</Button>
         </div>
         <div className="rounded-lg border border-dashed border-slate-300 p-3 text-sm text-slate-600">

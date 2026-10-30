@@ -428,23 +428,20 @@ async def draft_first_email(tenant_id: str, lead_id: str, kind: str = "first") -
 
 
 async def send_outreach(db, email_id: str, by: str) -> dict:
-    """Owner approved the draft → send via Resend if configured, otherwise record it as simulated."""
-    from app.channels import integration
+    """Owner approved the draft → send via Brevo if configured, otherwise record it as simulated."""
+    from app.channels import email_ready, email_send, inbound_address, integration
 
     em = await db.one("SELECT e.*, l.email AS to_email FROM outreach_emails e JOIN leads l ON l.id=e.lead_id WHERE e.id=:id", id=email_id)
     if em["status"] in ("sent", "simulated"):
         return em
     cfg = await integration(db, "email")
-    key, sender = cfg.get("api_key") or settings.resend_api_key, cfg.get("outreach_from") or cfg.get("from") or settings.email_from
     status, ext = "simulated", None
-    if key and sender and em["to_email"]:
+    if email_ready(cfg) and em["to_email"]:
         try:
-            async with httpx.AsyncClient(timeout=20) as c:
-                r = await c.post("https://api.resend.com/emails", headers={"Authorization": f"Bearer {key}"},
-                                 json={"from": sender, "to": [em["to_email"]], "subject": em["subject"], "text": em["body"],
-                                       "reply_to": cfg.get("reply_to") or cfg.get("inbound_address") or sender})
-                r.raise_for_status()
-                status, ext = "sent", r.json().get("id")
+            ext = await email_send(cfg, em["to_email"], em["subject"], em["body"], sender=cfg.get("outreach_from") or None,
+                                   reply_to=cfg.get("reply_to") or cfg.get("inbound_address") or await inbound_address(db.tenant_id),
+                                   tenant_id=db.tenant_id)
+            status = "sent"
         except Exception as e:
             log.warning("outreach send failed: %s", e)
             status = "failed"

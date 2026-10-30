@@ -1,6 +1,8 @@
 """Public endpoints: auth, widget, channel webhooks, media."""
 
+import logging
 import secrets
+import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import PlainTextResponse, Response
@@ -13,6 +15,7 @@ from app.db import system_session, tenant_session
 from app.pipeline import InboundAttachment, InboundMessage, ingest
 
 router = APIRouter()
+log = logging.getLogger("sahay.webhooks")
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +151,9 @@ async def wa_webhook(request: Request):
             tid = str(route["tenant_id"])
             names = {c.get("wa_id"): (c.get("profile") or {}).get("name") for c in v.get("contacts", [])}
             for st in v.get("statuses", []):
+                if st.get("errors"):  # Meta only explains a failed delivery here
+                    log.warning("whatsapp %s to %s: %s", st.get("status"), st.get("recipient_id"),
+                                [(e.get("code"), e.get("title"), (e.get("error_data") or {}).get("details")) for e in st["errors"]])
                 async with tenant_session(tid) as db:
                     await db.exec("UPDATE messages SET status=:s WHERE channel='whatsapp' AND external_id=:e", s=st.get("status"), e=st.get("id"))
             for m in v.get("messages", []):
@@ -191,24 +197,42 @@ async def _wa_message(tid: str, m: dict, profile_name: str | None):
 
 
 # ---------------------------------------------------------------------------
-# Email (Resend inbound webhook)
+# Email: Brevo inbound parsing (a batch of parsed emails) or a legacy Resend inbound event, plus Brevo delivery events
 # ---------------------------------------------------------------------------
-@router.post("/webhooks/email")
-async def email_webhook(request: Request):
+def _email_hook_ok(request: Request) -> bool:
+    if not settings.email_webhook_token:
+        return True
+    got = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip() or request.query_params.get("token", "")
+    return secrets.compare_digest(got, settings.email_webhook_token)
+
+
+def _brevo_email(item: dict) -> dict:
+    """One Brevo inbound item → the fields we ingest."""
+    heads = {k.lower(): (v[0] if isinstance(v, list) and v else v) for k, v in (item.get("Headers") or {}).items()}
+    sender = item.get("From") or {}
+    to = [m.get("Address") for m in item.get("To") or [] if isinstance(m, dict)] + [r for r in item.get("Recipients") or [] if isinstance(r, str)]
+    return {"to": [t for t in to if t], "from_email": sender.get("Address") or "", "from_name": sender.get("Name") or None,
+            "subject": item.get("Subject") or "", "text": item.get("ExtractedMarkdownMessage") or item.get("RawTextBody") or "",
+            "message_id": item.get("MessageId") or heads.get("message-id"),
+            "thread": item.get("InReplyTo") or heads.get("in-reply-to") or heads.get("references"), "attachments": item.get("Attachments") or []}
+
+
+async def _brevo_attachment(att: dict) -> InboundAttachment | None:
     import httpx
 
-    payload = await request.json()
-    data = payload.get("data", payload)
-    tos = data.get("to") or []
-    tos = [tos] if isinstance(tos, str) else tos
-    async with system_session() as db:
-        route = None
-        for to in tos:
-            route = await db.one("SELECT tenant_id FROM channel_routes WHERE channel='email' AND external_key=:k", k=norm_email(to))
-            if route:
-                break
-    if not route:
-        return {"ok": False, "reason": "no tenant for recipient"}
+    if not (settings.brevo_api_key and att.get("DownloadToken")) or (att.get("ContentLength") or 0) > 10_000_000:
+        return None
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.get(f"https://api.brevo.com/v3/inbound/attachments/{att['DownloadToken']}", headers={"api-key": settings.brevo_api_key})
+    if r.status_code >= 300:
+        log.warning("brevo attachment %s: %s", att.get("Name"), r.status_code)
+        return None
+    return InboundAttachment(r.content, att.get("ContentType") or sniff_mime(r.content, "application/octet-stream"), att.get("Name") or "")
+
+
+async def _resend_email(data: dict) -> dict:
+    import httpx
+
     text = data.get("text")
     if not text and data.get("email_id") and settings.resend_api_key:
         async with httpx.AsyncClient(timeout=20) as c:
@@ -217,15 +241,69 @@ async def email_webhook(request: Request):
             if r.status_code < 300:
                 full = r.json()
                 text = full.get("text") or full.get("html") or ""
-    text = _strip_quoted(text or "")
-    sender = data.get("from") or ""
-    headers = data.get("headers") or {}
+    sender, headers = data.get("from") or "", data.get("headers") or {}
+    tos = data.get("to") or []
     msg_id = data.get("message_id") or headers.get("message-id") or data.get("email_id")
-    thread = headers.get("in-reply-to") or headers.get("references") or msg_id
-    await ingest(str(route["tenant_id"]), InboundMessage(
-        channel="email", text=(f"Subject: {data.get('subject', '')}\n\n" + text).strip(), from_email=sender,
-        from_name=sender.split("<")[0].strip().strip('"') or None, external_id=msg_id, thread_id=thread, subject=data.get("subject"),
-    ))
+    return {"to": [tos] if isinstance(tos, str) else tos, "from_email": sender, "from_name": sender.split("<")[0].strip().strip('"') or None,
+            "subject": data.get("subject") or "", "text": text or "", "message_id": msg_id,
+            "thread": headers.get("in-reply-to") or headers.get("references") or msg_id, "attachments": []}
+
+
+@router.post("/webhooks/email")
+async def email_webhook(request: Request):
+    if not _email_hook_ok(request):
+        raise HTTPException(401, "bad token")
+    payload = await request.json()
+    if isinstance(payload.get("items"), list):
+        emails = [_brevo_email(i) for i in payload["items"]]
+    else:
+        emails = [await _resend_email(payload.get("data", payload))]
+    done = 0
+    for e in emails:
+        async with system_session() as db:
+            route = None
+            for to in e["to"]:
+                route = await db.one("SELECT tenant_id FROM channel_routes WHERE channel='email' AND external_key=:k", k=norm_email(to))
+                if route:
+                    break
+        if not route:
+            log.info("inbound email to %s: no business", e["to"])
+            continue
+        atts = [a for a in [await _brevo_attachment(x) for x in e["attachments"][:5]] if a]
+        await ingest(str(route["tenant_id"]), InboundMessage(
+            channel="email", text=(f"Subject: {e['subject']}\n\n" + _strip_quoted(e["text"])).strip(), from_email=e["from_email"],
+            from_name=e["from_name"], external_id=e["message_id"], thread_id=e["thread"] or e["message_id"], subject=e["subject"],
+            attachments=atts))
+        done += 1
+    return {"ok": True, "ingested": done}
+
+
+# Brevo transactional events → the message's delivery status (bounces show as failed on the ticket)
+EMAIL_EVENT_STATUS = {"delivered": "delivered", "opened": "read", "uniqueOpened": "read", "click": "read", "hardBounce": "failed",
+                      "softBounce": "deferred", "deferred": "deferred", "blocked": "failed", "invalid": "failed", "spam": "spam"}
+
+
+@router.post("/webhooks/email/events")
+async def email_events(request: Request):
+    if not _email_hook_ok(request):
+        raise HTTPException(401, "bad token")
+    payload = await request.json()
+    events = payload if isinstance(payload, list) else [payload]  # batched webhooks send a list
+    for ev in events:
+        st, mid = EMAIL_EVENT_STATUS.get(ev.get("event", "")), ev.get("message-id")
+        tags = ev.get("tags") or ([ev["tag"]] if ev.get("tag") else [])
+        tid = next((t[2:] for t in tags if isinstance(t, str) and t.startswith("t:")), None)  # set by email_send
+        if not (st and mid and tid):
+            continue
+        try:
+            tid = str(uuid.UUID(tid))
+        except ValueError:
+            continue
+        async with tenant_session(tid) as db:
+            await db.exec("UPDATE messages SET status=:s WHERE channel='email' AND external_id=:m AND status NOT IN ('read','failed')", s=st, m=mid)
+            await db.exec("UPDATE outreach_emails SET status=CASE WHEN :s='failed' THEN 'bounced' ELSE status END WHERE external_id=:m", s=st, m=mid)
+        if st == "failed":
+            log.warning("email %s to %s: %s %s", mid, ev.get("email"), ev.get("event"), ev.get("reason", ""))
     return {"ok": True}
 
 
