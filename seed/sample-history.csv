@@ -1,0 +1,9 @@
+customer_message,human_reply,outcome,order_ref
+"Mera order LL1050 kab tak aayega? bahut din ho gaye","Hi Rahul, your order is with Delhivery at the Bengaluru hub and will be delivered tomorrow.",info,LL1050
+"The charm set chain arrived broken. Very disappointed.","So sorry! We have sent a free replacement, it will reach you in 3-5 days. No need to return the broken one.",replacement,LL1042
+"I want to cancel my order, ordered by mistake","Done! Your order is cancelled and the refund will reach your account in 5-7 days.",cancelled,LL1110
+"Do the charms fit Pandora bracelets?","Our charms use a 5mm lobster clasp, they fit Loop Loot bracelets and most standard link chains.",info,
+"Can I return the earrings? colour is different","Sorry, earrings can't be returned for hygiene reasons unless damaged. We can share a coupon for your next order.",denied_return,
+"Bhai refund chahiye mujhe, ring size galat hai","Rings can be exchanged for a different size within 10 days. Shall we arrange the exchange?",exchange_offered,LL1088
+"Is COD available for Hyderabad?","Yes, COD is available on orders up to ₹3,000 with a ₹30 COD fee.",info,
+"my order shows delivered but I didn't get it","We've raised a complaint with the courier and will update you within 48 hours.",escalated,
