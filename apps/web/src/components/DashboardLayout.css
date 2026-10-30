@@ -115,6 +115,7 @@
 .sahay-dashboard .sahay-card-header { gap: 12px; padding: 18px 20px; border-color: var(--dashboard-border); background: #f2eee5; border-radius: 19px 19px 0 0; }
 .sahay-dashboard .sahay-card-title { font-size: 15px; font-weight: 600; color: var(--dashboard-ink); }
 .sahay-dashboard .sahay-card-body { padding: 20px; }
+.sahay-dashboard .sahay-card-body:has(> table) { max-width: 100%; overflow-x: auto; border-radius: inherit; scrollbar-width: thin; }
 .sahay-dashboard .sahay-card-body--flush { padding: 0; }
 .sahay-dashboard .sahay-page-header { margin-bottom: 28px; align-items: center; gap: 16px; }
 .sahay-dashboard .sahay-page-header > div:first-child { min-width: 0; }
@@ -133,7 +134,9 @@
 .sahay-dashboard .sahay-input:focus { background: var(--dashboard-field); border-color: var(--dashboard-blue); }
 .sahay-dashboard :is(input, textarea)::placeholder { color: var(--dashboard-muted); opacity: 1; }
 .sahay-dashboard :is(input[type='checkbox'], input[type='radio']) { accent-color: var(--dashboard-blue); }
-.sahay-dashboard .sahay-field > span:first-child { font-size: 14px; margin-bottom: 8px; }
+.sahay-dashboard .sahay-field { min-width: 0; }
+.sahay-dashboard .sahay-field > span:first-child { font-size: 14px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.sahay-dashboard .sahay-field > input[type='file'] { width: 100%; max-width: 100%; min-width: 0; }
 .sahay-dashboard .sahay-field > span:last-child:not(:first-child) { font-size: 12px; line-height: 1.5; margin-top: 6px; }
 .sahay-dashboard .sahay-tabs { overflow-x: auto; overflow-y: hidden; max-width: 100%; scrollbar-width: none; gap: 12px; border-color: var(--dashboard-border); }
 .sahay-dashboard .sahay-tabs::-webkit-scrollbar { display: none; }
