@@ -64,7 +64,7 @@
     var frame = document.createElement('iframe');
     frame.title = (cfg.name || 'Shop') + ' chat';
     frame.src = BASE + '/w/' + encodeURIComponent(state.key) + '?origin=' + encodeURIComponent(location.origin);
-    frame.allow = 'clipboard-write';
+    frame.allow = 'microphone; clipboard-write';
     frame.style.cssText = 'width:100%;height:100%;border:0';
     wrap.appendChild(frame);
     document.body.appendChild(wrap);
