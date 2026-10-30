@@ -689,6 +689,8 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
   delivered_at timestamptz
 );
 
+ALTER TABLE IF EXISTS telegram_chats ADD COLUMN IF NOT EXISTS pending_name text;
+
 -- Telegram chats (global routing, like channel_routes): which business + customer a chat proved it belongs to
 CREATE TABLE IF NOT EXISTS telegram_chats (
   chat_id text PRIMARY KEY,
@@ -698,6 +700,7 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
   verified boolean NOT NULL DEFAULT false,
   tries int NOT NULL DEFAULT 0,
   pending_order text,
+  pending_name text,
   preferred_tenant uuid REFERENCES tenants(id) ON DELETE SET NULL,
   tg_name text,
   created_at timestamptz NOT NULL DEFAULT now(),

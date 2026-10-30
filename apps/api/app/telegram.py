@@ -1,7 +1,8 @@
 """Telegram channel: one platform bot (TELEGRAM_BOT_TOKEN) serves every business on Sahay.
 
-Telegram doesn't tell us who the person is, so a new chat must first prove which order it's about:
-    "<order id> <name on the order>"   e.g.  LL1042 Priya Sharma      (a phone number works instead of the name)
+Telegram doesn't tell us who the person is, so a new chat must first prove which order it's about. The bot asks
+two questions: the name on the order, then the order ID (or both at once: "LL1042 Priya Sharma"; a phone number
+also works instead of the name).
 The order id also tells us which business the chat belongs to. Until both match, nothing reaches the AI.
 After that, every message goes through the normal pipeline (triage → skills/tools → policy → reply) and the
 reply is sent back with the Bot API. /new switches to another order.
@@ -140,11 +141,10 @@ async def _verify(chat: dict, ref: str, name: str | None, phone: str | None, tg_
                           or (phone and norm_phone(found[1].get("customer_phone")) == phone))
     if not ok:
         tries = (chat.get("tries") or 0) + 1
-        await _save(chat["chat_id"], tries=tries, pending_order=None)
+        await _save(chat["chat_id"], tries=tries, pending_order=None, pending_name=None)
         left = MAX_TRIES - tries
-        return (f"Sorry, I couldn't match order {ref} with that {'phone number' if phone and not name else 'name'}. "
-                f"Please check both and send them again, like: LL1042 Priya Sharma"
-                + (f" ({left} {'try' if left == 1 else 'tries'} left)" if left <= 2 else ""))
+        return (f"Sorry, I couldn't find order {ref} under that {'phone number' if phone and not name else 'name'}. "
+                + (f"({left} {'try' if left == 1 else 'tries'} left) " if left <= 2 else "") + "Let's try again.\n\n" + ASK_NAME)
     tid, order, business = found
     async with tenant_session(tid) as db:
         # a chat belongs to one customer at a time: drop any earlier link of this chat in this business
@@ -155,7 +155,7 @@ async def _verify(chat: dict, ref: str, name: str | None, phone: str | None, tg_
 
         await audit(db, "customer", order.get("customer_name"), "telegram.verified", "customer", cust["id"], {"order": order["order_ref"]})
     await _save(chat["chat_id"], tenant_id=tid, customer_id=cust["id"], order_ref=order["order_ref"], verified=True, tries=0,
-                pending_order=None, tg_name=tg_name)
+                pending_order=None, pending_name=None, tg_name=tg_name)
     first = (order.get("customer_name") or "").split(" ")[0] or "there"
     items = ", ".join(i.get("title", "") for i in (order.get("line_items") or [])[:2])
     return (f"Thanks {first}! ✅ I found your {business} order #{order['order_ref']}: {items} ({order.get('status', '').replace('_', ' ')}).\n"
@@ -163,20 +163,33 @@ async def _verify(chat: dict, ref: str, name: str | None, phone: str | None, tg_
             "Send /new any time to switch to another order.")
 
 
-GREETING = ("Namaste! 👋 I'm the Sahay support assistant.\n"
-            "To find your order, please send your order ID and the name on the order.\n"
-            "Example: LL1042 Priya Sharma")
+ASK_NAME = "First, what's your full name, as you entered it on your order?"
+GREETING = "Namaste! 👋 I'm Sahay, the support assistant for this shop.\nI'll find your order in two quick steps.\n\n" + ASK_NAME
+GREETINGS = {"hi", "hii", "hiii", "hello", "helo", "hey", "heyy", "namaste", "namaskar", "hola", "start", "help", "ok", "okay", "yes",
+             "no", "hlo", "sup", "yo", "thanks", "thank you", "good morning", "good evening", "good afternoon", "pranam", "ji", "haan"}
+
+
+def _ask_order(name: str) -> str:
+    first = name.split()[0].capitalize()
+    return f"Thanks, {first}! Now, what's your order ID? You'll find it in your order confirmation (for example LL1042)."
+
+
+def _looks_like_name(text: str) -> bool:
+    words = text.strip().split()
+    return (1 <= len(words) <= 4 and text.strip().lower() not in GREETINGS and "?" not in text
+            and all(w[:1].isalpha() for w in words) and not re.search(r"\d", text))
 
 
 async def _gate(chat: dict, text: str, tg_name: str | None) -> str | None:
-    """Returns the bot's reply while the chat isn't verified yet; None when the message may go to the AI."""
+    """Two questions before anything reaches the AI: the name on the order, then the order ID.
+    Returns the bot's reply while the chat isn't verified yet; None when the message may go to the AI."""
     cmd = text.strip().split()[0].lower() if text.strip() else ""
     if cmd in ("/new", "/reset", "/logout"):
         if chat.get("tenant_id"):
             async with tenant_session(str(chat["tenant_id"])) as db:
                 await db.exec("DELETE FROM customer_identities WHERE kind='telegram' AND value=:v", v=chat["chat_id"])
-        await _save(chat["chat_id"], verified=False, tenant_id=None, customer_id=None, order_ref=None, pending_order=None)
-        return "Okay, starting fresh. " + GREETING.split("\n", 1)[1]
+        await _save(chat["chat_id"], verified=False, tenant_id=None, customer_id=None, order_ref=None, pending_order=None, pending_name=None)
+        return "Okay, let's start fresh. " + ASK_NAME
     if cmd == "/start":
         payload = text.strip().split()[1:2]
         if payload:  # deep link t.me/<bot>?start=<business-slug> pins the business
@@ -186,6 +199,7 @@ async def _gate(chat: dict, text: str, tg_name: str | None) -> str | None:
                 await _save(chat["chat_id"], preferred_tenant=t["id"])
         if chat.get("verified"):
             return f"You're connected to order #{chat['order_ref']}. Tell me what you need, or send /new to switch orders."
+        await _save(chat["chat_id"], pending_order=None, pending_name=None)
         return GREETING
     if chat.get("verified"):
         return None
@@ -196,15 +210,28 @@ async def _gate(chat: dict, text: str, tg_name: str | None) -> str | None:
             return "Too many tries. Please try again in an hour, or contact the shop directly."
         await _save(chat["chat_id"], tries=0)
         chat = {**chat, "tries": 0}
+
     ref, name, phone = parse_claim(text)
-    if not ref and chat.get("pending_order") and (phone or (name and 1 <= len(_tokens(text)) <= 4 and "?" not in text)):
-        ref = chat["pending_order"]  # they sent the order id first, now the name
-    if ref and (name or phone):
+    if len(text.split()) == 2 and (joined := parse_claim(text.replace(" ", ""))[0]) and re.search(r"[A-Z]", joined):
+        ref, name = joined, None  # "ll 1042" → LL1042
+    if ref and (phone or (name and _looks_like_name(name))):  # both in one message: "LL1042 Priya Sharma"
         return await _verify(chat, ref, name, phone, tg_name)
+    if not chat.get("pending_name"):  # step 1: the name
+        if ref:  # they jumped ahead with the order id: keep it, still ask for the name
+            await _save(chat["chat_id"], pending_order=ref)
+            return f"Got order {ref}. " + ASK_NAME
+        if phone and chat.get("pending_order"):
+            return await _verify(chat, chat["pending_order"], None, phone, tg_name)
+        if not _looks_like_name(text):
+            return ("Namaste! 👋 " if text.strip().lower() in GREETINGS else "") + ASK_NAME
+        if chat.get("pending_order"):  # order id came first, this is the name
+            return await _verify(chat, chat["pending_order"], text.strip(), None, tg_name)
+        await _save(chat["chat_id"], pending_name=text.strip())
+        return _ask_order(text.strip())
+    # step 2: the order id
     if ref:
-        await _save(chat["chat_id"], pending_order=ref)
-        return f"Got order {ref}. Now please send the name on that order (as you entered it when ordering)."
-    return GREETING
+        return await _verify(chat, ref, chat["pending_name"], None, tg_name)
+    return "Please send just your order ID (for example LL1042). It's in your order confirmation message or email."
 
 
 # ---------------------------------------------------------------------------
