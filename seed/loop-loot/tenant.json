@@ -1,0 +1,106 @@
+{
+  "name": "Loop Loot",
+  "slug": "loop-loot",
+  "settings": {
+    "business_description": "Loop Loot is an Indian D2C brand selling quirky charm sets, bracelets, keychains and everyday accessories, mostly to college students and young professionals. Ships across India; about 60% of orders are cash on delivery.",
+    "brand_voice": "Warm, playful and quick. Like a helpful friend who works at the store. Uses 'ji' politely in Hinglish, light emojis (✨🙏), never over-the-top.",
+    "website_url": "https://looploot.in",
+    "languages": [
+      "en",
+      "hinglish",
+      "hi"
+    ],
+    "default_autonomy": "auto",
+    "autonomy": {
+      "refund_request": "auto",
+      "praise": "auto",
+      "spam": "human"
+    },
+    "owner_phone": "+919000000001",
+    "brand_color": "#e8590c",
+    "widget_greeting": "Hey! 👋 Loop Loot support here. Order kahan hai, kuch toota hai, ya koi sawaal? Bataiye!",
+    "debounce_ms": 2500,
+    "sla_minutes": 60
+  },
+  "policy_text": "Replace damaged or wrong items automatically if the item value is up to ₹800 and the customer reports it within 7 days of delivery with a photo that shows the damage.\nRefunds always need my approval.\nCustomers can cancel orders automatically before they are shipped.\nAddress changes are fine automatically before shipping.\nIf a customer is very frustrated (frustration 60 or more) you may give an apology coupon of up to ₹50 automatically.\nNever accept returns more than 10 days after delivery.\nNever auto-approve anything for customers with a fraud score of 0.6 or more.",
+  "users": [
+    {
+      "email": "owner@looploot.demo",
+      "name": "Aditi (Loop Loot)",
+      "role": "owner"
+    }
+  ],
+  "commerce": {
+    "provider": "mock"
+  },
+  "random_orders": {
+    "count": 70,
+    "days_back": 30,
+    "couriers": [
+      "Delhivery",
+      "Xpressbees",
+      "Ecom Express",
+      "Shadowfax"
+    ],
+    "cod_share": 0.6,
+    "pincodes": [
+      "560034",
+      "560076",
+      "110017",
+      "400050",
+      "411014",
+      "122002",
+      "700091",
+      "500081",
+      "302017",
+      "226010"
+    ]
+  },
+  "agent": {
+    "agent_name": "Lia",
+    "persona": "Lia is cheerful and quick, like a college friend who knows every charm in the store. Suggests gift combos.",
+    "sales": {
+      "icp": "Corporate HR and admin teams ordering festive/onboarding gifts, college fest and club organisers, and small gift shops or cafes in Indian metros that could stock charm sets",
+      "offer": "Bulk and corporate gifting: custom charm gift boxes from 25 units, free personalised notes",
+      "sender_name": "Riya from Loop Loot",
+      "booking_url": ""
+    },
+    "voice": {
+      "language": "hinglish",
+      "business_hours": "10:00-20:00 Mon-Sat"
+    },
+    "leads": [
+      {
+        "source": "widget",
+        "name": "Ananya Rao",
+        "company": "Brightpath HR Solutions",
+        "email": "ananya.rao@brightpath.example.in",
+        "phone": "+919845012345",
+        "city": "Bengaluru",
+        "interest": "60 Bestie Charm Gift Boxes for Diwali employee gifting",
+        "stage": "engaged",
+        "score": 86
+      },
+      {
+        "source": "whatsapp",
+        "name": "Kabir Sethi",
+        "company": "IIT Delhi Rendezvous team",
+        "phone": "+919811223344",
+        "city": "Delhi",
+        "interest": "Keychain trios as fest merch, ~200 units",
+        "stage": "callback",
+        "score": 72
+      },
+      {
+        "source": "import",
+        "name": "Meera Iyer",
+        "company": "The Little Gift Nook",
+        "email": "hello@littlegiftnook.example.in",
+        "city": "Pune",
+        "interest": "Boutique gift store, may stock charm sets",
+        "stage": "new",
+        "score": null
+      }
+    ]
+  }
+}
