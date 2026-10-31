@@ -77,8 +77,8 @@
       '#sahay-frame-wrap.is-open{display:block;animation:sahay-in .32s cubic-bezier(.16,1,.3,1)}' +
       '@keyframes sahay-in{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}' +
       '@media (prefers-reduced-motion:reduce){#sahay-frame-wrap.is-open{animation:none}}' +
-      '@media (max-width:480px){#sahay-launcher{right:16px;bottom:16px;width:56px;padding:0;justify-content:center}#sahay-launcher .sl-t{display:none}#sahay-launcher.is-open{display:none}' +
-      '#sahay-frame-wrap{right:0;bottom:0;width:100vw;max-width:100vw;height:100%;max-height:100%;border-radius:0}}';
+      '@media (max-width:480px){#sahay-launcher{right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:56px;padding:0;justify-content:center}#sahay-launcher .sl-t{display:none}#sahay-launcher.is-open{display:none}' +
+      '#sahay-frame-wrap{right:0;bottom:0;width:100vw;max-width:100vw;height:100%;max-height:100%;height:100dvh;max-height:100dvh;border-radius:0}}';
     document.head.appendChild(css);
     var wrap = document.createElement('div');
     wrap.id = 'sahay-frame-wrap';

@@ -156,7 +156,7 @@ function CustomerPhone({ channel, who, products }: { channel: string; who: any; 
                 <option key={p.sku + 'c'} value={`${p.sku}:catalog`} className="text-slate-800">Website photo — {p.title}</option>,
               ])}
             </select>
-            <input className="flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400" placeholder="Type a message" value={text}
+            <input className="min-w-0 flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400" placeholder="Type a message" value={text}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (text.trim() || file || photo) && send.mutate(undefined)} />
             <button onClick={toggleRecord} title="Record a voice note" className={cx('rounded-full p-2', rec ? 'bg-red-600 text-white' : 'text-slate-500 hover:bg-slate-100')}>
               {rec ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}

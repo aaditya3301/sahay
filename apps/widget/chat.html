@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Chat</title>
 <style>
   @font-face { font-family: 'Store Bricolage'; src: url('/fonts/bricolage-grotesque-latin.woff2') format('woff2'); font-weight: 200 800; font-display: swap; }
@@ -112,6 +112,22 @@
   .ft button:active { transform: translateY(1px); }
   .pw { font-size: 10.5px; text-align: center; color: var(--muted); opacity: .75; padding: 7px 0 9px; background: var(--bg); letter-spacing: .01em; }
   @media (max-width: 340px) { .dock { padding-inline: 8px; } }
+
+  /* Phones: sized to the visible screen, 16px fields (iOS zooms the page on anything smaller) and comfortable tap targets */
+  @media (max-width: 600px) {
+    .app { height: 100vh; height: 100dvh; }
+    .hd { padding-top: max(16px, env(safe-area-inset-top)); padding-left: max(18px, env(safe-area-inset-left)); }
+    .hd .x { width: 44px; height: 44px; }
+    .dock { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+    .ft input[type=text] { font-size: 16px; padding: 12px 6px; }
+    .att { width: 40px; height: 40px; }
+    .send { width: 42px; height: 42px; }
+    .quick button { min-height: 40px; padding: 9px 15px; font-size: 13.5px; }
+    .card button { min-height: 40px; }
+    .verify input { font-size: 16px; min-height: 44px; }
+    .verify button, .pri { min-height: 44px; }
+    .pw { padding-bottom: max(9px, env(safe-area-inset-bottom)); }
+  }
 
     @media (prefers-reduced-motion: reduce) { .typing i, .card .ph img { animation: none !important; transition: none !important; } }
 </style>

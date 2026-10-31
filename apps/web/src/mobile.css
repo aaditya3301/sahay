@@ -1,0 +1,123 @@
+/* Mobile polish for every screen. Imported once from main.tsx and only active on phones / tablets / touch devices.
+   Tailwind v4 utilities live in a cascade layer, so these unlayered rules win over utility classes. */
+
+/* ---- all screens ---------------------------------------------------------------------------------------- */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+button, a, summary, select, label, [role='button'], [role='tab'] { touch-action: manipulation; }
+:not(pre) > code { overflow-wrap: anywhere; }
+
+/* iOS zooms the page when a field under 16px is focused, which leaves half the screen cut off */
+@media (max-width: 768px), (pointer: coarse) {
+  :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='hidden'], [type='submit'], [type='button']), select, textarea) {
+    font-size: 16px !important;
+  }
+}
+
+/* ---- dashboard: phones and small tablets ---------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* header: the page title shrinks first, so the workspace name stays readable */
+  .sahay-dashboard .dashboard-location { flex: 1 1 0; min-width: 0; }
+  .sahay-dashboard .dashboard-location-current { min-width: 0; }
+  .sahay-dashboard .dashboard-workspace { flex: 0 1 auto; width: max-content; max-width: 160px; min-width: 96px; }
+  .sahay-dashboard .dashboard-workspace-name { max-width: 110px; }
+  .sahay-dashboard .dashboard-topbar { padding-inline: max(12px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right)); }
+  .sahay-dashboard .dashboard-canvas { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
+
+  /* grid cells may shrink below their content (a long dropdown or URL otherwise stretches the whole card) */
+  .sahay-dashboard :is(.grid, [class*='grid-cols']) > * { min-width: 0; }
+  .sahay-dashboard select { max-width: 100%; text-overflow: ellipsis; }
+}
+
+/* touch screens (phones and tablets): comfortable targets */
+@media (max-width: 768px), (pointer: coarse) {
+  /* form controls: comfortable to tap */
+  .sahay-dashboard :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='hidden']), select) { min-height: 44px; }
+  .sahay-dashboard textarea { min-height: 88px; }
+  .sahay-dashboard :is(button.border, button.flex.w-full, .code-block-copy):not(.sahay-button) { min-height: 40px; }
+  .sahay-dashboard button.text-left { min-height: 40px; }
+  .sahay-dashboard input[type='file'] { min-height: 44px; }
+  .sahay-dashboard .developer-start-links a { min-height: 40px; display: inline-flex; align-items: center; }
+  .sahay-dashboard button.rounded-full { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+
+  /* things that scroll sideways inside a card must say so */
+  .sahay-dashboard pre { max-width: 100%; }
+
+  /* text-style toggles and back links: a 40px-tall touch target */
+  .sahay-dashboard :is(.inbox-conversation-details > summary, .policy-rule-technical summary, .policy-safety summary, .studio-skill-tools > summary, details > summary:not([class])) { padding-block: 11px; }
+  .sahay-dashboard :is(.ticket-back, .setup-text-link, a.mb-3.inline-flex) { min-height: 40px; display: inline-flex; align-items: center; }
+  .sahay-dashboard .setup-resource-links a { min-height: 40px; }
+}
+
+/* small links and icon buttons get a larger invisible hit area (layout unchanged) */
+@media (max-width: 768px), (pointer: coarse) {
+  .sahay-dashboard :is(a.text-xs, a.text-sm, a.font-medium, a.font-semibold, button.text-slate-300, button.text-slate-400, button.text-slate-500):not([class*='dashboard-'], [class*='sahay-'], [class*='setup-'], .absolute, .fixed, .sticky) { position: relative; }
+  .sahay-dashboard :is(a.text-xs, a.text-sm, a.font-medium, a.font-semibold, button.text-slate-300, button.text-slate-400, button.text-slate-500):not([class*='dashboard-'], [class*='sahay-'], [class*='setup-'])::after { content: ''; position: absolute; inset: -11px; }
+}
+
+/* ---- tab rows: every tab visible, no hidden scrolling -------------------------------------------------- */
+@media (max-width: 1023px) {
+  .sahay-dashboard .sahay-tabs { flex-wrap: wrap; overflow: visible; border-bottom: 0; gap: 8px; padding-bottom: 6px; }
+  .sahay-dashboard .sahay-tabs .sahay-tab { margin: 0; min-height: 40px; padding: 8px 14px; border: 1px solid var(--dashboard-border); border-radius: 999px; background: var(--dashboard-surface); color: var(--dashboard-muted); font-size: 13px; }
+  .sahay-dashboard .sahay-tabs .sahay-tab[aria-pressed='true'] { border-color: var(--dashboard-sidebar); background: var(--dashboard-sidebar); color: var(--dashboard-sidebar-ink); }
+}
+
+@media (max-width: 640px) {
+  /* dialogs: sized to the visible screen (not behind the address bar); the title and close button stay on top while the form scrolls */
+  .sahay-dashboard .sahay-modal-panel { max-height: calc(100dvh - 24px); overscroll-behavior: contain; }
+  .sahay-dashboard .sahay-modal-panel > :first-child { position: sticky; top: 0; z-index: 1; background: var(--dashboard-surface); }
+  /* a sticky header that now wraps onto several rows would eat the screen: let it scroll away */
+  .sahay-dashboard .studio-sticky-header { position: static; }
+}
+
+/* ---- wide tables become stacked cards ------------------------------------------------------------------ */
+@media (max-width: 860px) {
+  .sahay-dashboard table[data-stack] { display: block; width: 100%; }
+  .sahay-dashboard table[data-stack] > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .sahay-dashboard table[data-stack] > tbody { display: block; }
+  .sahay-dashboard table[data-stack] > tbody > tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; padding: 14px 16px; border: 0; border-bottom: 1px solid var(--dashboard-border); }
+  .sahay-dashboard table[data-stack] > tbody > tr:last-child { border-bottom: 0; }
+  .sahay-dashboard table[data-stack] > tbody > tr > td { display: block; min-width: 0; padding: 0; border: 0; font-size: 13px; text-align: left; overflow-wrap: anywhere; }
+  .sahay-dashboard table[data-stack] > tbody > tr > td::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--dashboard-muted); font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
+  .sahay-dashboard table[data-stack] > tbody > tr > td:is(:first-child, [data-label=''], [data-wide]) { grid-column: 1 / -1; }
+  .sahay-dashboard table[data-stack] > tbody > tr > td:is(:first-child, [data-label=''])::before { display: none; }
+  .sahay-dashboard table[data-stack] > tbody > tr > td:first-child { font-size: 15px; font-weight: 600; }
+  .sahay-dashboard table[data-stack] > tbody > tr > td:is(:empty, [data-empty]):not(:first-child) { display: none; }
+}
+
+/* ---- storefront: small header / footer links get a 44px hit area (layout unchanged) ---------------------------- */
+@media (max-width: 760px), (pointer: coarse) {
+  .store-header nav > :is(a, button), .store-wordmark, .store-footer-top > a, .store-footer-bottom > button { position: relative; }
+  .store-header nav > :is(a, button)::after, .store-wordmark::after, .store-footer-top > a::after, .store-footer-bottom > button::after { content: ''; position: absolute; inset: -10px -8px; }
+}
+
+/* ---- sign in / sign up: the switch link under the form --------------------------------------------------------- */
+@media (max-width: 768px), (pointer: coarse) {
+  .sahay-auth-switch a { position: relative; }
+  .sahay-auth-switch a::after { content: ''; position: absolute; inset: -12px -8px; }
+}
+
+/* ---- profile: label above value when the screen is too narrow for two columns ---------------------------------- */
+@media (max-width: 480px) {
+  .sahay-dashboard .profile-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+
+/* ---- tablets: the three-column conversation view squeezes the thread to a sliver, so it stacks like on a phone ---- */
+@media (max-width: 1023px) {
+  .sahay-dashboard .ticket-layout { display: flex; height: auto; min-height: 0; max-height: none; flex-direction: column; }
+  .sahay-dashboard :is(.ticket-customer-column, .ticket-ai-column) { overflow: visible; }
+  .sahay-dashboard .ticket-conversation { height: min(68svh, 620px); min-height: 420px; }
+}
+
+/* short tab labels ("All") still need a finger-sized target */
+@media (max-width: 1023px), (pointer: coarse) {
+  .sahay-dashboard .sahay-tabs .sahay-tab { min-width: 44px; }
+}
+
+/* ---- landing / auth: the logo link gets a taller hit area; the storefront never scrolls sideways while fonts load ---- */
+@media (max-width: 768px), (pointer: coarse) {
+  .sahay-wordmark { position: relative; }
+  .sahay-wordmark::after { content: ''; position: absolute; inset: -6px -4px; }
+}
+@media (max-width: 768px) {
+  .storefront { overflow-x: clip; }
+}

@@ -110,16 +110,45 @@
 
   footer.doc-foot { margin-top: 28px; padding: 0 8px; color: var(--muted); font-size: 14px; text-align: center; }
 
+  .nav-links { display: contents; }
+  .nav-toggle { display: none; }
   @media (max-width: 900px) {
     .wrap { grid-template-columns: minmax(0, 1fr); }
     nav { position: static; height: auto; max-height: none; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 2px 4px; padding: 14px; }
-    .brand { padding: 0 8px 0 4px; width: 100%; }
+    .brand { padding: 0 8px 0 4px; flex: 1; min-width: 0; min-height: 44px; }
     nav .group { width: 100%; margin: 8px 0 0; padding: 0 4px; }
     nav a.item { padding: 6px 12px; background: var(--navy-hover); }
     nav .foot { display: none; }
     .topbar { position: static; }
     .crumbs span { display: none; }
+    /* the long list of sections folds away behind a Menu button */
+    .nav-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--navy-hover); color: var(--navy-ink); font: 600 14.5px 'Bricolage Grotesque', system-ui, sans-serif; cursor: pointer; }
+    .nav-links { display: none; width: 100%; flex-wrap: wrap; gap: 2px 4px; }
+    nav.open .nav-links { display: flex; }
+    nav a.item { padding: 10px 14px; }
   }
+  /* phones: tables become cards, the copy button gets its own row, buttons are easy to hit */
+  @media (max-width: 640px) {
+    .topbar { height: auto; min-height: 56px; flex-wrap: wrap; padding-block: 8px; }
+    .btn { white-space: nowrap; padding: 8px 16px; }
+    .crumbs { display: none; }
+    .top-actions { width: 100%; }
+    .top-actions .btn { flex: 1; }
+    .hero-actions .btn { flex: 1 1 auto; }
+    .cb-body { display: flex; flex-direction: column; }
+    .cb-copy { position: static; order: -1; align-self: flex-end; margin: 10px 12px 0; min-height: 40px; padding: 8px 16px; }
+    pre { padding: 14px 16px 16px; }
+    .tabs button { min-height: 40px; }
+    details.cb > summary { min-height: 48px; }
+    table.stack, table.stack tbody { display: block; border: 0; background: none; overflow: visible; }
+    table.stack tr { display: block; margin: 0 0 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--field); }
+    table.stack tr.head-row { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; border: 0; }
+    table.stack td { display: block; padding: 3px 0; border: 0; overflow-wrap: anywhere; }
+    table.stack td::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    table.stack td:first-child { padding-bottom: 6px; font-weight: 600; }
+    table.stack td:first-child::before, table.stack td:empty { display: none; }
+  }
+  @media (hover: none) { h2 .anchor { display: none; } }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
 </style>
 </head>
@@ -409,7 +438,26 @@ Sahay.verifyWebhook(rawBody, req.headers, process.env.SAHAY_WEBHOOK_SECRET)</cod
   }, { rootMargin: '-20% 0px -70% 0px' });
   document.querySelectorAll('section.sec[id]').forEach(function (s) { spy.observe(s); });
 
-  // 5) sections are built by this script, so jump to a #link (e.g. /docs#events) once they exist
+  // 5) phones: the sidebar's links fold behind a Menu button (CSS shows them in full on wide screens)
+  var nav = document.querySelector('nav'), brand = nav.querySelector('.brand');
+  var links = document.createElement('div'); links.className = 'nav-links'; links.id = 'nav-links';
+  while (brand.nextSibling) links.appendChild(brand.nextSibling);
+  nav.appendChild(links);
+  var toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'nav-toggle';
+  toggle.setAttribute('aria-controls', 'nav-links'); toggle.setAttribute('aria-expanded', 'false'); toggle.textContent = 'Menu';
+  nav.insertBefore(toggle, links);
+  toggle.onclick = function () { var open = nav.classList.toggle('open'); toggle.setAttribute('aria-expanded', open ? 'true' : 'false'); };
+  links.addEventListener('click', function (e) { if (e.target.closest('a.item')) { nav.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); } });
+
+  // 6) phones: each table row reads as a card, so every cell is labelled with its column heading
+  document.querySelectorAll('table').forEach(function (t) {
+    var head = t.rows[0]; if (!head || !head.querySelector('th')) return;
+    var names = [].map.call(head.cells, function (c) { return c.textContent.trim(); });
+    head.classList.add('head-row'); t.classList.add('stack');
+    [].slice.call(t.rows, 1).forEach(function (r) { [].forEach.call(r.cells, function (c, i) { c.setAttribute('data-label', names[i] || ''); }); });
+  });
+
+  // 7) sections are built by this script, so jump to a #link (e.g. /docs#events) once they exist
   function jump() { var t = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1))); if (t) t.scrollIntoView(); }
   jump(); window.addEventListener('load', jump); window.addEventListener('hashchange', jump);
 })();

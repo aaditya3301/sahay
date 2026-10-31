@@ -26,7 +26,7 @@ export default function Simulations() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={<span className="flex items-center gap-1.5"><Users className="h-4 w-4 text-brand-600" />AI mystery shoppers</span>}>
           <p className="mb-3 text-sm text-slate-500">Simulated customers — angry, confused, Hindi-only, fraudsters, prompt-injectors — chat with your agent. You get a readiness score and every failing transcript.</p>
-          <div className="mb-3 grid grid-cols-2 gap-1.5">
+          <div className="mb-3 grid grid-cols-1 gap-1.5 min-[400px]:grid-cols-2">
             {personas?.map((p: any) => (
               <button key={p.key} onClick={() => toggle(p.key)} className={cx('rounded-lg border p-2 text-left text-xs', chosen.includes(p.key) ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:bg-slate-50')}>
                 <div className="flex items-center justify-between font-medium text-slate-800">{p.name}{p.safety_critical && <ShieldAlert className="h-3.5 w-3.5 text-red-500" />}</div>
@@ -97,10 +97,10 @@ export function SimRun() {
         <div className="divide-y divide-slate-100">
           {cases.map((c: any) => (
             <div key={c.id}>
-              <button onClick={() => setOpen(open === c.id ? null : c.id)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50">
-                <div className="flex items-center gap-2">
+              <button onClick={() => setOpen(open === c.id ? null : c.id)} className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 py-3 text-left hover:bg-slate-50">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   {c.status === 'running' || c.status === 'pending' ? <span className="h-4 w-4 animate-pulse rounded-full bg-amber-300" /> : c.passed ? <CheckCircle2 className="h-4 w-4 text-good" /> : <XCircle className="h-4 w-4 text-critical" />}
-                  <div><div className="text-sm font-medium">{c.persona.name}{c.persona.safety_critical && <Badge tone="red" className="ml-1.5">safety</Badge>}</div>
+                  <div className="min-w-0"><div className="text-sm font-medium">{c.persona.name}{c.persona.safety_critical && <Badge tone="red" className="ml-1.5">safety</Badge>}</div>
                     <div className="max-w-2xl truncate text-xs text-slate-500">{c.persona.key === 'shadow' ? c.persona.customer_message : c.judge?.summary || c.persona.expect}</div></div>
                 </div>
                 <div className="flex items-center gap-2 text-xs">

@@ -51,10 +51,10 @@ export function CustomerDetail() {
         <Card title="Timeline (all channels)">
           <div className="space-y-2">
             {data.timeline.map((e: any, i: number) => (
-              <div key={i} className="flex gap-3 text-sm">
+              <div key={i} className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm sm:flex-nowrap">
                 <div className="w-28 shrink-0 text-xs text-slate-400">{time(e.at)}</div>
                 <div className="mt-0.5">{e.kind === 'message' ? <ChannelIcon channel={e.channel} /> : <span className="text-xs">{e.kind === 'action' ? '⚡' : '🎫'}</span>}</div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 basis-full break-words sm:basis-0 sm:flex-1">
                   <span className={e.direction === 'out' ? 'text-brand-700' : 'text-slate-800'}>{e.direction === 'out' ? '↩ ' : ''}{e.text}</span>
                   {e.ticket && <span className="ml-1 text-xs text-slate-400">{tref(e.ticket)}</span>}
                 </div>

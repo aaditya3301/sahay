@@ -180,10 +180,10 @@ export function LeadDetail() {
           <Card title="Timeline">
             <div className="space-y-2">
               {data.events.map((e: any) => (
-                <div key={e.id} className="flex gap-3 text-sm">
+                <div key={e.id} className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm">
                   <div className="w-28 shrink-0 text-xs text-slate-400">{time(e.created_at)}</div>
                   <div className="w-24 shrink-0 text-xs font-medium text-slate-500">{eventLabel(e.kind)}</div>
-                  <div className="min-w-0 flex-1 text-slate-700">{e.summary}
+                  <div className="min-w-0 basis-full break-words text-slate-700 sm:basis-0 sm:flex-1">{e.summary}
                     {e.data?.reasons && <ul className="mt-0.5 list-disc pl-4 text-xs text-slate-500">{e.data.reasons.map((r: string, i: number) => <li key={i}>{r}</li>)}</ul>}
                   </div>
                 </div>

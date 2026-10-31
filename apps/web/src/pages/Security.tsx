@@ -16,7 +16,7 @@ export default function Security() {
   return (
     <>
       <PageHeader title="Security" subtitle="Review safeguards and security activity." />
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Injection attempts blocked" value={count('prompt_injection')} icon={<ShieldAlert className="h-4 w-4" />} />
         <Stat label="Actions denied by code" value={data.denied_actions.length} icon={<Lock className="h-4 w-4" />} />
         <Stat label="Replies stopped by guard" value={count('reply_blocked')} icon={<ShieldCheck className="h-4 w-4" />} />
