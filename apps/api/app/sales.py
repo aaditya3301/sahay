@@ -96,7 +96,31 @@ async def set_stage(db, lead_id, stage: str, by: str, reason: str = "") -> None:
 
 
 async def lead_for_customer(db, customer_id) -> dict | None:
-    return await db.one("SELECT * FROM leads WHERE customer_id=:c ORDER BY created_at DESC LIMIT 1", c=customer_id)
+    lead = await db.one("SELECT * FROM leads WHERE customer_id=:c ORDER BY created_at DESC LIMIT 1", c=customer_id)
+    if lead:
+        return lead
+    # leads from search or a CSV have no customer until they answer: match by their email/phone and link them
+    ids = await db.all("SELECT kind, value FROM customer_identities WHERE customer_id=:c AND kind IN ('email','phone')", c=customer_id)
+    emails = [i["value"].lower() for i in ids if i["kind"] == "email"]
+    phones = [i["value"] for i in ids if i["kind"] == "phone"]
+    if not (emails or phones):
+        return None
+    lead = await db.one("SELECT * FROM leads WHERE customer_id IS NULL AND (lower(email) = ANY(:e) OR phone = ANY(:p)) "
+                        "ORDER BY created_at DESC LIMIT 1", e=emails, p=phones)
+    if lead:
+        await db.exec("UPDATE leads SET customer_id=:c, updated_at=now() WHERE id=:id", c=customer_id, id=lead["id"])
+        lead = {**lead, "customer_id": customer_id}
+    return lead
+
+
+async def lead_opted_out(db, customer: dict, channel: str) -> None:
+    """The person asked us to stop: no more follow-ups to them as a lead."""
+    lead = await lead_for_customer(db, customer["id"])
+    if not lead or lead["stage"] in ("customer", "dropped"):
+        return
+    await set_stage(db, lead["id"], "dropped", "customer", f"asked us to stop ({channel})")
+    await db.exec("UPDATE leads SET next_action=NULL, next_action_at=NULL WHERE id=:id", id=lead["id"])
+    await db.exec("UPDATE outreach_emails SET status='rejected' WHERE lead_id=:l AND status='draft'", l=lead["id"])
 
 
 async def after_chat_turn(db, customer: dict, intent: str | None, channel: str) -> None:
@@ -419,7 +443,7 @@ async def draft_first_email(tenant_id: str, lead_id: str, kind: str = "first") -
         log.exception("email draft failed")
         return None
     body = (f"{d.body.strip()}\n\nReply Now — chat with us instantly (no forms): {reply_url(tenant_id, lead_id)}\n\n"
-            f"{sender}\n{srow['website_url'] or ''}").strip()
+            f"{sender}\n{srow['website_url'] or ''}".strip() + "\n\nNot interested? Reply STOP and we won't email you again.")
     async with tenant_session(tenant_id) as db:
         row = await db.one("INSERT INTO outreach_emails (tenant_id, lead_id, kind, subject, body) VALUES (:t,:l,:k,:s,:b) RETURNING *",
                            t=tenant_id, l=lead_id, k=kind, s=d.subject, b=body)

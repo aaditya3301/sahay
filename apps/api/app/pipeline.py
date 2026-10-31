@@ -110,6 +110,16 @@ def _convert_audio(data: bytes, mime: str) -> tuple[bytes, str]:
         return data, mime.split(";")[0]
 
 
+OPT_OUT_WORDS = {"STOP", "UNSUBSCRIBE", "STOP OFFERS", "STOP EMAILS", "NOT INTERESTED"}
+
+
+def opt_out_text(text: str | None) -> bool:
+    """STOP and friends, also as the first line of an email reply (which arrives as "Subject: …" + body)."""
+    body = re.sub(r"\ASubject:[^\n]*\n+", "", text or "").strip()
+    first = (body.splitlines() or [""])[0].strip().upper().rstrip(".!")
+    return first in OPT_OUT_WORDS
+
+
 async def resolve_customer(db, msg: InboundMessage) -> dict:
     keys = []
     if msg.from_phone:
@@ -182,9 +192,12 @@ async def ingest(tenant_id: str, msg: InboundMessage) -> dict | None:
                 "INSERT INTO conversations (tenant_id, customer_id, channel, external_thread_id, is_simulation) VALUES (:t,:c,:ch,:th,:s) RETURNING *",
                 t=tenant_id, c=customer["id"], ch=msg.channel, th=msg.thread_id, s=msg.is_simulation,
             )
-        if (msg.text or "").strip().upper() in ("STOP", "UNSUBSCRIBE", "STOP OFFERS"):
+        if opt_out_text(msg.text):
             await db.exec("UPDATE customers SET marketing_opt_out=true WHERE id=:c", c=customer["id"])
             await audit(db, "customer", customer.get("display_name"), "marketing.opt_out", "customer", customer["id"], {"channel": msg.channel})
+            from app.sales import lead_opted_out
+
+            await lead_opted_out(db, customer, msg.channel)
             await send_to_customer(db, conv, "Done ✅ You won't get offers from us anymore. You can still message us any time for help with orders.",
                                    None, "system", "Auto-reply")
             return None
