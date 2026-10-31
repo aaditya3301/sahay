@@ -25,6 +25,7 @@ for pair in WHATSAPP_VERIFY_TOKEN=sahay-wa-verify-token WHATSAPP_APP_SECRET=saha
             LIVEKIT_SIP_TRUNK_ID=sahay-livekit-sip-trunk SARVAM_API_KEY=sahay-sarvam-api-key VOICE_PLATFORM_KEY=sahay-voice-platform-key \
             BREVO_API_KEY=sahay-brevo-api-key EMAIL_WEBHOOK_TOKEN=sahay-email-webhook-token EMAIL_FROM=sahay-email-from \
             INBOUND_EMAIL_DOMAIN=sahay-inbound-email-domain TELEGRAM_BOT_TOKEN=sahay-telegram-bot-token \
+            EMAIL_IMAP_USER=sahay-email-imap-user EMAIL_IMAP_PASSWORD=sahay-email-imap-password VOICE_DEFAULT_TENANT=sahay-voice-default-tenant \
             CASHFREE_APP_ID=sahay-cashfree-app-id CASHFREE_SECRET_KEY=sahay-cashfree-secret-key; do
   gcloud secrets describe "${pair#*=}" --project "$PROJECT" >/dev/null 2>&1 && SECRETS="$SECRETS,$pair:latest"
 done

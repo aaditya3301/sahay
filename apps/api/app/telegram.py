@@ -1,11 +1,11 @@
 """Telegram channel: one platform bot (TELEGRAM_BOT_TOKEN) serves every business on Sahay.
 
-Telegram doesn't tell us who the person is, so a new chat must first prove which order it's about. The bot asks
-two questions: the name on the order, then the order ID (or both at once: "LL1042 Priya Sharma"; a phone number
-also works instead of the name).
-The order id also tells us which business the chat belongs to. Until both match, nothing reaches the AI.
-After that, every message goes through the normal pipeline (triage → skills/tools → policy → reply) and the
-reply is sent back with the Bot API. /new switches to another order.
+Telegram doesn't tell us who the person is, so a new chat first asks two questions: their name, then their mobile
+number (typed, or shared with Telegram's "Share my number" button, which proves it's their own). The number finds
+the customer and the business they buy from (routing.py); a typed number must come with the name on that account.
+A t.me/<bot>?start=<business-slug> link pins the business, so new customers of that shop can chat too.
+Until then nothing reaches the AI. After that, every message goes through the normal pipeline (triage →
+skills/tools → policy → reply) and the reply is sent back with the Bot API. /new starts over.
 
 Webhook: POST /webhooks/telegram, authenticated by Telegram's X-Telegram-Bot-Api-Secret-Token header.
 Local dev without a public URL: TELEGRAM_POLLING=1 reads updates with getUpdates instead.
@@ -26,7 +26,9 @@ from app.db import system_session, tenant_session
 
 log = logging.getLogger("sahay.telegram")
 MAX_TRIES = 5
-ORDER_RX = re.compile(r"^#?([A-Za-z]{0,6}-?\d{3,12})[.,]?$")
+# reply keyboards: ask for the number with Telegram's contact button, then take the keyboard away again
+ASK_CONTACT = {"keyboard": [[{"text": "📱 Share my number", "request_contact": True}]], "resize_keyboard": True, "one_time_keyboard": True}
+NO_KEYBOARD = {"remove_keyboard": True}
 
 
 def enabled() -> bool:
@@ -48,10 +50,12 @@ async def api(method: str, payload: dict | None = None, timeout: float = 20):
     return data["result"]
 
 
-async def send_text(chat_id: str, text: str, buttons: list[dict] | None = None) -> str | None:
+async def send_text(chat_id: str, text: str, buttons: list[dict] | None = None, keyboard: dict | None = None) -> str | None:
     payload: dict = {"chat_id": chat_id, "text": text[:4096], "disable_web_page_preview": True}
     if buttons:  # callback data carries the button title, so a tap reads like the customer typed it
         payload["reply_markup"] = {"inline_keyboard": [[{"text": b["title"][:40], "callback_data": b["title"][:64]} for b in buttons[:3]]]}
+    elif keyboard:
+        payload["reply_markup"] = keyboard
     res = await api("sendMessage", payload)
     return str(res.get("message_id"))
 
@@ -72,7 +76,7 @@ async def download(file_id: str) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Who is this? order id + name (or phone)
+# Who is this? name + mobile number
 # ---------------------------------------------------------------------------
 def _tokens(s: str) -> list[str]:
     s = unicodedata.normalize("NFKD", s.lower())
@@ -80,7 +84,7 @@ def _tokens(s: str) -> list[str]:
 
 
 def name_matches(typed: str, actual: str) -> bool:
-    """The first name must match; every other word typed must appear in the order's name (small typos allowed)."""
+    """The first name must match; every other word typed must appear in the account's name (small typos allowed)."""
     t, a = _tokens(typed), _tokens(actual)
     if not t or not a:
         return False
@@ -88,19 +92,12 @@ def name_matches(typed: str, actual: str) -> bool:
     return close(t[0], a[0]) and all(any(close(x, y) for y in a) for x in t)
 
 
-def parse_claim(text: str) -> tuple[str | None, str | None, str | None]:
-    """→ (order_ref, name, phone) from a free-form message like 'LL1042 Priya Sharma' or '#5531 9876543210'."""
-    words = text.replace(",", " ").split()
-    orders = [w for w in words if ORDER_RX.match(w)]
-    phones = [w for w in orders if len(re.sub(r"\D", "", w)) >= 10 and not re.search(r"[A-Za-z]", w)]
-    lettered = [w for w in orders if re.search(r"[A-Za-z]", w)]
-    order = (lettered or [w for w in orders if w not in phones] or [None])[0]
-    rest = [w for w in words if w != order]
-    rest_digits = re.sub(r"\D", "", " ".join(rest))
-    phone = norm_phone(rest_digits) if len(rest_digits) >= 10 and not _tokens(" ".join(rest)) else None
-    name = " ".join(w for w in rest if not re.search(r"\d", w)) or None
-    ref = ORDER_RX.match(order).group(1).upper().replace("-", "") if order else None
-    return ref, name, phone
+def parse_contact(text: str) -> tuple[str | None, str | None]:
+    """→ (name, phone) from a free-form message like 'Priya Sharma', '9876543210' or 'Priya Sharma 98765 43210'."""
+    digits = re.sub(r"\D", "", text)
+    phone = norm_phone(digits) if 10 <= len(digits) <= 13 else None
+    name = " ".join(w for w in text.replace(",", " ").split() if not re.search(r"\d", w) and w not in ("+",)) or None
+    return name, phone
 
 
 async def _chat(chat_id: str) -> dict:
@@ -117,61 +114,64 @@ async def _save(chat_id: str, **fields) -> None:
                       chat_id=chat_id, **fields)
 
 
-async def _find_order(ref: str, prefer: str | None) -> tuple[str, dict, str] | None:
-    from app.commerce import get_commerce
-
-    async with system_session() as db:
-        tenants = [dict(id=prefer)] if prefer else await db.all("SELECT id FROM tenants WHERE status='active' ORDER BY created_at")
-    for t in tenants:
-        async with tenant_session(t["id"]) as db:
-            try:
-                o = await (await get_commerce(db)).get_order(ref)
-            except Exception:
-                o = None
-            if o:
-                return str(t["id"]), o, await db.val("SELECT name FROM tenants WHERE id=:t", t=t["id"])
-    return None
+def _shown(phone: str) -> str:
+    return f"{phone[:-10]} {phone[-10:-5]} {phone[-5:]}" if len(phone) > 10 else phone
 
 
-async def _verify(chat: dict, ref: str, name: str | None, phone: str | None, tg_name: str | None) -> str:
+async def _miss(chat: dict, text: str, keep_phone: str | None = None) -> tuple[str, dict]:
+    tries = (chat.get("tries") or 0) + 1
+    await _save(chat["chat_id"], tries=tries, pending_name=None, phone=keep_phone)
+    left = MAX_TRIES - tries
+    return text + (f" ({left} {'try' if left == 1 else 'tries'} left)" if left <= 2 else ""), ASK_CONTACT
+
+
+async def _connect(chat: dict, name: str | None, phone: str, own_number: bool, tg_name: str | None) -> tuple[str, dict]:
+    """Find the customer by their number, link this chat to them, and say which shop they're talking to."""
+    from app import routing
+    from app.core import audit
     from app.pipeline import InboundMessage, resolve_customer
 
-    found = await _find_order(ref, chat.get("preferred_tenant") and str(chat["preferred_tenant"]))
-    ok = bool(found) and ((name and name_matches(name, found[1].get("customer_name") or ""))
-                          or (phone and norm_phone(found[1].get("customer_phone")) == phone))
-    if not ok:
-        tries = (chat.get("tries") or 0) + 1
-        await _save(chat["chat_id"], tries=tries, pending_order=None, pending_name=None)
-        left = MAX_TRIES - tries
-        return (f"Sorry, I couldn't find order {ref} under that {'phone number' if phone and not name else 'name'}. "
-                + (f"({left} {'try' if left == 1 else 'tries'} left) " if left <= 2 else "") + "Let's try again.\n\n" + ASK_NAME)
-    tid, order, business = found
+    prefer = str(chat["preferred_tenant"]) if chat.get("preferred_tenant") else None
+    found = await routing.find_customer(phone=phone, only=prefer)
+    if found:
+        f = found[0]
+        if not own_number and not name_matches(name or "", f["name"] or ""):
+            # a typed number must come with the name on that account; the contact button proves the number is theirs
+            return await _miss(chat, f"That name doesn't match the account for {_shown(phone)}. Please send your full name again, "
+                                     "or tap “Share my number” below.", keep_phone=phone)
+        tid = f["tenant_id"]
+    elif prefer:  # opened from a shop's own link: a new customer of that shop
+        tid = prefer
+    else:
+        return await _miss(chat, f"I couldn't find a shop account with {_shown(phone)}. Please send the number you gave when you ordered, "
+                                 "or open this chat from your shop's website.")
     async with tenant_session(tid) as db:
         # a chat belongs to one customer at a time: drop any earlier link of this chat in this business
         await db.exec("DELETE FROM customer_identities WHERE kind='telegram' AND value=:v", v=chat["chat_id"])
-        cust = await resolve_customer(db, InboundMessage(channel="telegram", from_phone=order.get("customer_phone"), from_email=order.get("customer_email"),
-                                                         from_name=order.get("customer_name"), identity=("telegram", chat["chat_id"]), verified=True))
-        from app.core import audit
+        cust = await resolve_customer(db, InboundMessage(channel="telegram", from_phone=phone, from_name=name or tg_name,
+                                                         identity=("telegram", chat["chat_id"]), verified=True))
+        await audit(db, "customer", cust.get("display_name") or name, "telegram.verified", "customer", cust["id"],
+                    {"via": "contact" if own_number else "name_and_phone"})
+        business = await db.val("SELECT name FROM tenants WHERE id=:t", t=tid)
+        last = await db.one("SELECT order_ref, status FROM commerce_orders WHERE customer_phone=:p AND status <> 'payment_pending' "
+                            "ORDER BY placed_at DESC NULLS LAST LIMIT 1", p=phone)
+    await _save(chat["chat_id"], tenant_id=tid, customer_id=cust["id"], order_ref=last and last["order_ref"], verified=True, tries=0,
+                pending_name=None, pending_order=None, phone=phone, tg_name=tg_name)
+    first = (cust.get("display_name") or name or "").split(" ")[0] or "there"
+    latest = f" I can see your latest order #{last['order_ref']} ({last['status'].replace('_', ' ')})." if last else ""
+    return (f"Thanks {first}! ✅ You're connected to {business}.{latest}\n"
+            "Tell me what you need, in Hindi, Hinglish or English, and I'll take care of it.\nSend /new any time to start over."), NO_KEYBOARD
 
-        await audit(db, "customer", order.get("customer_name"), "telegram.verified", "customer", cust["id"], {"order": order["order_ref"]})
-    await _save(chat["chat_id"], tenant_id=tid, customer_id=cust["id"], order_ref=order["order_ref"], verified=True, tries=0,
-                pending_order=None, pending_name=None, tg_name=tg_name)
-    first = (order.get("customer_name") or "").split(" ")[0] or "there"
-    items = ", ".join(i.get("title", "") for i in (order.get("line_items") or [])[:2])
-    return (f"Thanks {first}! ✅ I found your {business} order #{order['order_ref']}: {items} ({order.get('status', '').replace('_', ' ')}).\n"
-            "Tell me what you need, in Hindi, Hinglish or English, and I'll take care of it.\n"
-            "Send /new any time to switch to another order.")
 
-
-ASK_NAME = "First, what's your full name, as you entered it on your order?"
-GREETING = "Namaste! 👋 I'm Sahay, the support assistant for this shop.\nI'll find your order in two quick steps.\n\n" + ASK_NAME
+ASK_NAME = "First, what's your full name?"
+GREETING = "Namaste! 👋 I'm Sahay, the support assistant for your shop.\nTwo quick questions so I can find your account.\n\n" + ASK_NAME
 GREETINGS = {"hi", "hii", "hiii", "hello", "helo", "hey", "heyy", "namaste", "namaskar", "hola", "start", "help", "ok", "okay", "yes",
              "no", "hlo", "sup", "yo", "thanks", "thank you", "good morning", "good evening", "good afternoon", "pranam", "ji", "haan"}
 
 
-def _ask_order(name: str) -> str:
-    first = name.split()[0].capitalize()
-    return f"Thanks, {first}! Now, what's your order ID? You'll find it in your order confirmation (for example LL1042)."
+def _ask_phone(name: str) -> str:
+    return (f"Thanks, {name.split()[0].capitalize()}! Now your mobile number, the one you gave the shop. "
+            "Tap “Share my number” below, or type it.")
 
 
 def _looks_like_name(text: str) -> bool:
@@ -180,16 +180,17 @@ def _looks_like_name(text: str) -> bool:
             and all(w[:1].isalpha() for w in words) and not re.search(r"\d", text))
 
 
-async def _gate(chat: dict, text: str, tg_name: str | None) -> str | None:
-    """Two questions before anything reaches the AI: the name on the order, then the order ID.
-    Returns the bot's reply while the chat isn't verified yet; None when the message may go to the AI."""
+async def _gate(chat: dict, text: str, tg_name: str | None, contact: dict | None = None,
+                sender_id: int | None = None) -> tuple[str, dict | None] | None:
+    """Name, then mobile number, before anything reaches the AI.
+    Returns (the bot's reply, keyboard) while the chat isn't linked to a customer yet; None when the message may go to the AI."""
     cmd = text.strip().split()[0].lower() if text.strip() else ""
     if cmd in ("/new", "/reset", "/logout"):
         if chat.get("tenant_id"):
             async with tenant_session(str(chat["tenant_id"])) as db:
                 await db.exec("DELETE FROM customer_identities WHERE kind='telegram' AND value=:v", v=chat["chat_id"])
-        await _save(chat["chat_id"], verified=False, tenant_id=None, customer_id=None, order_ref=None, pending_order=None, pending_name=None)
-        return "Okay, let's start fresh. " + ASK_NAME
+        await _save(chat["chat_id"], verified=False, tenant_id=None, customer_id=None, order_ref=None, pending_order=None, pending_name=None, phone=None)
+        return "Okay, let's start fresh. " + ASK_NAME, NO_KEYBOARD
     if cmd == "/start":
         payload = text.strip().split()[1:2]
         if payload:  # deep link t.me/<bot>?start=<business-slug> pins the business
@@ -198,40 +199,41 @@ async def _gate(chat: dict, text: str, tg_name: str | None) -> str | None:
             if t:
                 await _save(chat["chat_id"], preferred_tenant=t["id"])
         if chat.get("verified"):
-            return f"You're connected to order #{chat['order_ref']}. Tell me what you need, or send /new to switch orders."
-        await _save(chat["chat_id"], pending_order=None, pending_name=None)
-        return GREETING
+            return "You're connected. Tell me what you need, or send /new to start over.", None
+        await _save(chat["chat_id"], pending_name=None, phone=None)
+        return GREETING, NO_KEYBOARD
     if chat.get("verified"):
         return None
     if (chat.get("tries") or 0) >= MAX_TRIES:
         async with system_session() as db:
             locked = await db.val("SELECT updated_at > now() - interval '1 hour' FROM telegram_chats WHERE chat_id=:c", c=chat["chat_id"])
         if locked:
-            return "Too many tries. Please try again in an hour, or contact the shop directly."
+            return "Too many tries. Please try again in an hour, or contact the shop directly.", NO_KEYBOARD
         await _save(chat["chat_id"], tries=0)
         chat = {**chat, "tries": 0}
 
-    ref, name, phone = parse_claim(text)
-    if len(text.split()) == 2 and (joined := parse_claim(text.replace(" ", ""))[0]) and re.search(r"[A-Z]", joined):
-        ref, name = joined, None  # "ll 1042" → LL1042
-    if ref and (phone or (name and _looks_like_name(name))):  # both in one message: "LL1042 Priya Sharma"
-        return await _verify(chat, ref, name, phone, tg_name)
+    if contact:  # the "Share my number" button: Telegram vouches it's this person's own number
+        if sender_id is not None and contact.get("user_id") != sender_id:
+            return "Please share your own number with the button below, or type it.", ASK_CONTACT
+        name = chat.get("pending_name") or " ".join(x for x in (contact.get("first_name"), contact.get("last_name")) if x) or tg_name
+        return await _connect(chat, name, norm_phone(contact.get("phone_number")), True, tg_name)
+    name, phone = parse_contact(text)
+    if name and not _looks_like_name(name):
+        name = None
+    if phone and (name or chat.get("pending_name")):  # "Priya Sharma 9876543210", or the number after the name
+        return await _connect(chat, name or chat["pending_name"], phone, False, tg_name)
+    if phone:  # number first: keep it, still ask for the name
+        await _save(chat["chat_id"], phone=phone)
+        return f"Got {_shown(phone)}. " + ASK_NAME, NO_KEYBOARD
     if not chat.get("pending_name"):  # step 1: the name
-        if ref:  # they jumped ahead with the order id: keep it, still ask for the name
-            await _save(chat["chat_id"], pending_order=ref)
-            return f"Got order {ref}. " + ASK_NAME
-        if phone and chat.get("pending_order"):
-            return await _verify(chat, chat["pending_order"], None, phone, tg_name)
         if not _looks_like_name(text):
-            return ("Namaste! 👋 " if text.strip().lower() in GREETINGS else "") + ASK_NAME
-        if chat.get("pending_order"):  # order id came first, this is the name
-            return await _verify(chat, chat["pending_order"], text.strip(), None, tg_name)
+            return ("Namaste! 👋 " if text.strip().lower() in GREETINGS else "") + ASK_NAME, None
+        if chat.get("phone"):  # the number came first: this is the name
+            return await _connect(chat, text.strip(), chat["phone"], False, tg_name)
         await _save(chat["chat_id"], pending_name=text.strip())
-        return _ask_order(text.strip())
-    # step 2: the order id
-    if ref:
-        return await _verify(chat, ref, chat["pending_name"], None, tg_name)
-    return "Please send just your order ID (for example LL1042). It's in your order confirmation message or email."
+        return _ask_phone(text.strip()), ASK_CONTACT
+    # step 2: the number
+    return "Please share your mobile number: tap “Share my number” below, or type the 10-digit number.", ASK_CONTACT
 
 
 # ---------------------------------------------------------------------------
@@ -255,9 +257,11 @@ async def handle_update(update: dict) -> None:
     tg_name = " ".join(x for x in (who.get("first_name"), who.get("last_name")) if x) or who.get("username")
     text = msg.get("text") or msg.get("caption") or ""
     chat = await _chat(chat_id)
-    reply = await _gate(chat, text, tg_name)
+    reply = await _gate(chat, text, tg_name, msg.get("contact"), who.get("id"))
     if reply is not None:
-        await send_text(chat_id, reply)
+        await send_text(chat_id, reply[0], keyboard=reply[1])
+        return
+    if msg.get("contact") and not text:  # shared the number again after linking: nothing to answer
         return
     atts = []
     try:
@@ -281,7 +285,7 @@ async def handle_update(update: dict) -> None:
     await typing(chat_id)
     await ingest(str(chat["tenant_id"]), InboundMessage(
         channel="telegram", text=text, identity=("telegram", chat_id), thread_id=chat_id, external_id=f"tg:{chat_id}:{msg.get('message_id')}",
-        from_name=tg_name, attachments=atts, verified=True))
+        from_name=tg_name, attachments=atts, verified=True, sender=f"@{who['username']}" if who.get("username") else None))
 
 
 async def poll_forever() -> None:

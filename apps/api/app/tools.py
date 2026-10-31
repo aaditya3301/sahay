@@ -166,8 +166,10 @@ async def owned_order(ctx: ToolContext, order_ref: str) -> tuple[dict | None, bo
     order = await shop.get_order(order_ref or "")
     if not order:
         return None, False
-    if ctx.voice_call_id:  # on a call the caller ID alone isn't enough: the caller must have verified this order id
-        return order, order["order_ref"].upper() in (await call_state(ctx)).get("verified_orders", [])
+    if ctx.voice_call_id:  # on a call: the caller's own orders (placed with the number they're calling from), or one they verified by id
+        state = await call_state(ctx)
+        mine = bool(state.get("caller_phone")) and norm_phone(order.get("customer_phone")) == state["caller_phone"]
+        return order, mine or order["order_ref"].upper() in state.get("verified_orders", [])
     ids = await customer_identities(ctx)
     belongs = (norm_phone(order.get("customer_phone")) in ids["phones"]) or (norm_email(order.get("customer_email")) in ids["emails"])
     return order, belongs
@@ -414,10 +416,11 @@ async def _call_tool(ctx: ToolContext, name: str, args: dict) -> dict:
                 "previous_tickets": [{"number": t["number"], "intent": t["intent"], "status": t["status"], "summary": t["summary"]} for t in tickets]}
     if name == "list_customer_orders":
         ids = await customer_identities(ctx)
-        if ctx.voice_call_id:
-            n = sum(len(await shop.find_orders(phone=p, limit=20)) for p in list(ids["phones"])[:2])
-            return {"orders_on_file": n, "note": "Don't read out orders on a call. Ask for the order ID (it's in their order confirmation) "
-                                                  "and call verify_order; after it matches, use get_order."}
+        if ctx.voice_call_id:  # on a call: the orders placed with the number they're calling from
+            caller = (await call_state(ctx)).get("caller_phone")
+            if not caller:
+                return {"orders": [], "note": "No caller number on this call. Ask for the order ID and call verify_order."}
+            ids = {"phones": {caller}, "emails": set()}
         if (ctx.conversation or {}).get("channel") == "webchat" and not (ids["phones"] or ids["emails"]):
             return {"orders": [], "note": "This web visitor has not verified a phone yet. If they ask about an order, ask for the order id "
                                           "(website orders look like LL-7KQ3XD) and call get_order, or call request_verification."}
@@ -440,7 +443,7 @@ async def _call_tool(ctx: ToolContext, name: str, args: dict) -> dict:
             order = {**order, "customer_phone": None, "customer_email": None, "note": "Opened with the order id the customer gave."}
         if not order or not belongs:
             if ctx.voice_call_id:
-                return {"found": False, "note": "Not verified on this call. Ask for the order ID and call verify_order first; don't say whether the order exists."}
+                return {"found": False, "note": "Not an order of this caller's number. Ask for the order ID and call verify_order first; don't say whether the order exists."}
             return {"found": False, "note": "No order with that number for this customer. Ask them to re-check the number or the phone/email used."}
         if name == "track_shipment":
             return {k: order[k] for k in ("order_ref", "courier", "awb", "shipment_status", "expected_delivery", "delivered_at", "status")}

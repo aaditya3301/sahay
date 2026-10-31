@@ -35,8 +35,9 @@ What we know about this caller (looked up before the call): {{caller_context}}
 
 Rules:
 - Speak {{language}}. One or two short sentences per turn. Repeat numbers back to confirm.
-- Orders: first ask for the order ID and call verify_order (pass the mobile number they ordered with if it's a different phone).
-  Share details or change the order only if it matches; never say whether an order exists before that.
+- Orders: the orders in "what we know" were placed with the number they're calling from, so help with them directly.
+  For any other order, ask for the order ID and call verify_order (pass the mobile number they ordered with if it's a different phone);
+  share details or change it only if it matches, and never say whether an order exists before that.
 - For stock, prices and changes, call the tools. Never promise what a tool didn't confirm.
 - The tools enforce the business's rules: if a tool says it needs approval or is denied, say so politely and offer the alternative.
 - Never read links aloud: use send_link_whatsapp (it sends on Telegram) and tell them to check Telegram.
@@ -54,6 +55,55 @@ def read_hook_token(token: str | None) -> str | None:
         return d["t"] if d.get("typ") == "sarvam_hook" else None
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# The platform's own Sarvam agent and phone number, shared by every business. Its hooks carry ?k=<VOICE_PLATFORM_KEY>
+# instead of a business key, and each call goes to the business that knows the caller.
+# ---------------------------------------------------------------------------
+def is_platform_key(k: str | None) -> bool:
+    import hmac
+
+    return bool(settings.voice_platform_key and k and hmac.compare_digest(k, settings.voice_platform_key))
+
+
+def platform_urls() -> dict:
+    base, k = settings.public_base_url.rstrip("/"), settings.voice_platform_key or "<VOICE_PLATFORM_KEY>"
+    return {"on_start": f"{base}/v1/voice/sarvam/start?k={k}", "tools": f"{base}/v1/voice/sarvam/tools/{{tool}}?k={k}",
+            "webhook": f"{base}/v1/voice/sarvam/webhook?k={k}"}
+
+
+async def route_call(body: dict) -> str:
+    """Which business a call on the platform number belongs to: the one it started with (for tool calls and the end of
+    the call), else the business the caller is a customer of, else the business that owns the dialled number, else
+    VOICE_DEFAULT_TENANT."""
+    from app import routing
+    from app.db import system_session
+
+    refs = [str(r) for r in (_pick(body, "call_ref"), _pick(body, "interaction_id"), _pick(body, "attempt_id"),
+                             (body.get("metadata") or {}).get("call_id")) if r]
+    async with system_session() as db:
+        if refs and (tid := await db.val("SELECT tenant_id FROM voice_call_routes WHERE ref = ANY(:r) LIMIT 1", r=refs)):
+            return str(tid)
+    caller = norm_phone(_pick(body, "user_phone_number", "user_identifier", "phone", "caller", "from"))
+    if caller and (tid := await routing.business_for(phone=caller)):
+        return tid
+    dialled = norm_phone(_pick(body, "agent_phone_number", "to")) or norm_phone(settings.sarvam_agent_phone)
+    async with system_session() as db:
+        if dialled and (tid := await db.val("SELECT tenant_id FROM channel_routes WHERE channel='voice' AND external_key=:k", k=dialled)):
+            return str(tid)
+        if settings.voice_default_tenant and (tid := await db.val("SELECT id FROM tenants WHERE slug=:s", s=settings.voice_default_tenant)):
+            return str(tid)
+    raise ValueError("No business knows this caller, and no default business is set (VOICE_DEFAULT_TENANT).")
+
+
+async def remember_call(tenant_id: str, *refs) -> None:
+    """Tool calls and the end-of-call webhook of a platform call find their business through these refs."""
+    from app.db import system_session
+
+    async with system_session() as db:
+        for r in {str(x) for x in refs if x}:
+            await db.exec("INSERT INTO voice_call_routes (ref, tenant_id) VALUES (:r,:t) ON CONFLICT (ref) DO NOTHING", r=r, t=tenant_id)
 
 
 def urls(tenant_id: str) -> dict:
@@ -88,6 +138,7 @@ async def call_for_interaction(tenant_id: str, interaction_id: str | None, phone
     async with tenant_session(tenant_id) as db:
         await db.exec("UPDATE voice_calls SET context = context || :x WHERE id=:id",
                       x={"interaction_id": str(interaction_id or ""), "provider": "sarvam"}, id=started["call_id"])
+    await remember_call(tenant_id, started["call_id"], interaction_id)
     return started["call_id"]
 
 
@@ -98,8 +149,11 @@ def variables(started: dict, prof: dict, business: str) -> dict:
     bits = []
     if ctx.get("name"):
         bits.append(f"Name {ctx['name']}{' (VIP)' if ctx.get('vip') else ''}.")
-    if ctx.get("orders_on_file"):  # details only after verify_order
-        bits.append(f"{ctx['orders_on_file']} order(s) on this number: ask for the order ID and verify it before discussing any order.")
+    orders = ctx.get("recent_orders") or []
+    if orders:  # placed with the number they're calling from: their own, so the agent can talk about them directly
+        bits.append("Their latest orders (from this number): " + " ".join(
+            f"#{o['order_ref']} {o['items']}, {o['status'].replace('_', ' ')}"
+            + (f", expected {o['expected_delivery']}" if o.get("expected_delivery") else "") + "." for o in orders))
     for t in tickets[:2]:
         bits.append(f"Open ticket #{t['number']}" + (f" ({t['intent']})" if t.get("intent") else "") + (f": {t['summary']}" if t.get("summary") else "") + ".")
     if ctx.get("lead"):
@@ -108,8 +162,8 @@ def variables(started: dict, prof: dict, business: str) -> dict:
         "call_ref": started["call_id"], "business_name": business, "agent_name": prof.get("agent_name") or "Sahay",
         "persona": prof.get("persona") or "", "language": {"hi": "simple Hindi", "en": "Indian English"}.get(prof["voice"].get("language"), "Hinglish"),
         "greeting": started.get("greeting") or "", "customer_name": (ctx.get("name") or "").split(" ")[0],
-        "caller_context": " ".join(bits) or "New caller, nothing on file.", "last_order_ref": "",
-        "last_order_status": "", "open_ticket": str(tickets[0]["number"]) if tickets else "",
+        "caller_context": " ".join(bits) or "New caller, nothing on file.", "last_order_ref": orders[0]["order_ref"] if orders else "",
+        "last_order_status": orders[0]["status"].replace("_", " ") if orders else "", "open_ticket": str(tickets[0]["number"]) if tickets else "",
         "known_customer": "yes" if ctx.get("known_customer") else "no",
     }
 
@@ -128,6 +182,7 @@ async def on_start(tenant_id: str, body: dict) -> dict:
                       x={"interaction_id": str(interaction or ""), "provider": "sarvam"}, id=started["call_id"])
         prof = await load_profile(db)
         business = await db.val("SELECT name FROM tenants WHERE id=:t", t=tenant_id)
+    await remember_call(tenant_id, started["call_id"], interaction)
     return variables(started, prof, business)
 
 
@@ -225,6 +280,7 @@ async def place_call(tenant_id: str, call_id: str) -> dict:
             await db.exec("UPDATE voice_calls SET status='failed', context = context || :x WHERE id=:id", x={"sarvam_error": r.text[:300]}, id=call_id)
         raise RuntimeError(f"Sarvam refused the call: {r.text[:200]}")
     attempt = r.json().get("attempt_id")
+    await remember_call(tenant_id, call_id, attempt)
     async with tenant_session(tenant_id) as db:
         await db.exec("UPDATE voice_calls SET status='ringing', context = context || :x WHERE id=:id",
                       x={"attempt_id": attempt, "provider": "sarvam"}, id=call_id)
@@ -255,3 +311,7 @@ def template(tenant_id: str, tool_specs: list[dict], secret_hint: str) -> dict:
             "variables": ["call_ref", "business_name", "agent_name", "persona", "language", "greeting", "customer_name", "caller_context",
                           "last_order_ref", "last_order_status", "open_ticket", "known_customer"],
             "response_template": "{{result}}", "max_wait_s": 5, "expires": str(now() + timedelta(days=3650))}
+
+
+if __name__ == "__main__":  # `uv run python -m app.voice_sarvam`: the hook URLs to paste into the platform's Sarvam agent
+    print(json.dumps(platform_urls(), indent=2))

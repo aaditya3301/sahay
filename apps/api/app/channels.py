@@ -94,11 +94,13 @@ def email_key(cfg: dict) -> tuple[str, str] | None:
         return "brevo", settings.brevo_api_key
     if settings.resend_api_key:
         return "resend", settings.resend_api_key
+    if settings.email_imap_user and settings.email_imap_password:  # the central mailbox sends its own replies (SMTP, same app password)
+        return "smtp", settings.email_imap_password
     return None
 
 
 def email_ready(cfg: dict) -> bool:
-    return bool(email_key(cfg) and (cfg.get("from") or settings.email_from))
+    return bool(email_key(cfg) and (cfg.get("from") or settings.email_from or settings.email_imap_user))
 
 
 class EmailError(RuntimeError):
@@ -147,19 +149,44 @@ def _html(text: str) -> str:
     return "<div style=\"font-family:Arial,sans-serif;font-size:14px;line-height:1.5\">" + html.escape(text).replace("\n", "<br>") + "</div>"
 
 
+def _smtp_send(sender: str, to: str, subject: str, text: str, reply_to: str, thread: dict) -> str:
+    """Send through the central mailbox's own SMTP server; returns the Message-ID (a customer's reply quotes it)."""
+    import smtplib
+    from email.message import EmailMessage
+    from email.utils import make_msgid
+
+    msg = EmailMessage()
+    msg["From"], msg["To"], msg["Subject"], msg["Reply-To"] = sender, to, subject[:250], reply_to
+    msg["Message-ID"] = mid = make_msgid(domain=settings.email_imap_user.rsplit("@", 1)[-1])
+    for k, v in thread.items():
+        msg[k] = v
+    msg.set_content(text)
+    msg.add_alternative(_html(text), subtype="html")
+    with smtplib.SMTP_SSL(settings.email_smtp_host, 465, timeout=30) as s:
+        s.login(settings.email_imap_user, settings.email_imap_password)
+        s.send_message(msg)
+    return mid
+
+
 async def email_send(cfg: dict, to: str, subject: str, text: str, in_reply_to: str | None = None,
                      sender: str | None = None, reply_to: str | None = None, tenant_id: str | None = None,
                      brand: str | None = None) -> str | None:
     """Send one plain-text email; returns the provider's message id (Brevo's is the SMTP Message-ID, which replies quote).
     brand names a bare sender address, so the shop's name shows instead of the platform's mailbox."""
     provider, key = email_key(cfg) or (None, None)
-    sender = sender or cfg.get("from") or settings.email_from
+    sender = sender or cfg.get("from") or settings.email_from or settings.email_imap_user
     if not key or not sender:
         raise EmailError("Email isn't connected (add a Brevo key and a verified sender).")
+    if provider == "smtp":  # Gmail only sends as the signed-in mailbox, so that is always the address
+        sender = settings.email_imap_user
     if brand and "<" not in sender:
         sender = f"{brand} <{sender}>"
     reply_to = reply_to or cfg.get("reply_to") or sender
     thread = {"In-Reply-To": in_reply_to, "References": in_reply_to} if in_reply_to else {}
+    if provider == "smtp":
+        import asyncio
+
+        return await asyncio.to_thread(_smtp_send, sender, to, subject, text, reply_to, thread)
     async with httpx.AsyncClient(timeout=20) as c:
         if provider == "brevo":
             r = await c.post(BREVO_SEND, headers={"api-key": key, "accept": "application/json"}, json={

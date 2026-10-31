@@ -681,14 +681,21 @@ async def widget_products(key: str):
 # ---------------------------------------------------------------------------
 # Voice pipeline API (Naaradh): authenticated with the business's secret key
 # ---------------------------------------------------------------------------
-async def voice_tenant(x_sahay_key: str | None, x_platform_key: str | None = None, to_number: str | None = None) -> str:
+async def voice_tenant(x_sahay_key: str | None, x_platform_key: str | None = None, to_number: str | None = None,
+                       from_number: str | None = None) -> str:
     if x_sahay_key:
         async with system_session() as db:
             r = await db.one("SELECT tenant_id FROM channel_routes WHERE channel='secret' AND external_key=:k",
                              k=hashlib.sha256(x_sahay_key.encode()).hexdigest())
         if r:
             return str(r["tenant_id"])
-    if x_platform_key and settings.voice_platform_key and hmac.compare_digest(x_platform_key, settings.voice_platform_key) and to_number:
+    platform = bool(x_platform_key and settings.voice_platform_key and hmac.compare_digest(x_platform_key, settings.voice_platform_key))
+    if platform and from_number:  # a known caller: the business they're a customer of
+        from app import routing
+
+        if tid := await routing.business_for(phone=from_number):
+            return tid
+    if platform and to_number:
         async with system_session() as db:
             r = await db.one("SELECT tenant_id FROM channel_routes WHERE channel='voice' AND external_key=:k", k=norm_phone(to_number))
         if r:
@@ -760,10 +767,15 @@ async def voice_tasks(x_sahay_key: str | None = Header(None)):
 # ---------------------------------------------------------------------------
 # Sarvam Voice Agents: on-start hook, API tools, end-of-call webhook (see voice_sarvam.py)
 # ---------------------------------------------------------------------------
-async def _sarvam_tenant(authorization: str | None, k: str | None = None) -> str:
-    from app.voice_sarvam import read_hook_token
+async def _sarvam_tenant(authorization: str | None, k: str | None = None, body: dict | None = None) -> str:
+    from app import voice_sarvam
 
-    if k and (tid := read_hook_token(k)):
+    if voice_sarvam.is_platform_key(k):  # the platform's shared agent: route by caller
+        try:
+            return await voice_sarvam.route_call(body or {})
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+    if k and (tid := voice_sarvam.read_hook_token(k)):
         return tid
     return await voice_tenant((authorization or "").removeprefix("Bearer ").strip() or None)
 
@@ -772,7 +784,8 @@ async def _sarvam_tenant(authorization: str | None, k: str | None = None) -> str
 async def sarvam_start(request: Request, authorization: str | None = Header(None), k: str | None = None):
     from app import voice_sarvam
 
-    return jsonable(await voice_sarvam.on_start(await _sarvam_tenant(authorization, k), await request.json()))
+    body = await request.json()
+    return jsonable(await voice_sarvam.on_start(await _sarvam_tenant(authorization, k, body), body))
 
 
 @router.post("/v1/voice/sarvam/tools/{name}")
@@ -783,7 +796,8 @@ async def sarvam_tool(name: str, request: Request, authorization: str | None = H
         body = await request.json()
     except Exception:
         body = {}
-    return jsonable(await voice_sarvam.tool(await _sarvam_tenant(authorization, k), name, body if isinstance(body, dict) else {}))
+    body = body if isinstance(body, dict) else {}
+    return jsonable(await voice_sarvam.tool(await _sarvam_tenant(authorization, k, body), name, body))
 
 
 @router.post("/v1/voice/sarvam/webhook")
@@ -791,7 +805,8 @@ async def sarvam_tool(name: str, request: Request, authorization: str | None = H
 async def sarvam_end(request: Request, authorization: str | None = Header(None), k: str | None = None):
     from app import voice_sarvam
 
-    return jsonable(await voice_sarvam.on_end(await _sarvam_tenant(authorization, k), await request.json()))
+    body = await request.json()
+    return jsonable(await voice_sarvam.on_end(await _sarvam_tenant(authorization, k, body), body))
 
 
 # ---------------------------------------------------------------------------
@@ -824,7 +839,7 @@ async def lk_session(body: LkSession, authorization: str | None = Header(None), 
     if authorization:
         tid, call_id = _lk_call(authorization)
     else:
-        tid, call_id = await voice_tenant(None, x_platform_key, body.to_number), None
+        tid, call_id = await voice_tenant(None, x_platform_key, body.to_number, body.from_number), None
     try:
         return jsonable(await voice_livekit.session(tid, call_id, from_number=body.from_number, to_number=body.to_number))
     except ValueError as e:

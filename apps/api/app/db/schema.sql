@@ -213,6 +213,8 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS messages_external_uidx ON messages (tenant_id, channel, external_id) WHERE external_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS messages_conv_idx ON messages (conversation_id, created_at);
+-- Who an inbound message came from, as the channel gave it: the email address, phone number or Telegram @handle
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender text;
 
 CREATE TABLE IF NOT EXISTS attachments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -507,6 +509,9 @@ CREATE TABLE IF NOT EXISTS lead_searches (
   error text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- web = Google Search, maps = a Google Maps scrape; results = the businesses a Maps scrape returned (shown as found)
+ALTER TABLE lead_searches ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'web';
+ALTER TABLE lead_searches ADD COLUMN IF NOT EXISTS results jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS leads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -725,6 +730,23 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
   preferred_tenant uuid REFERENCES tenants(id) ON DELETE SET NULL,
   tg_name text,
   created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- the bot now asks for the customer's name, then their phone number (typed, or shared with Telegram's contact button)
+ALTER TABLE telegram_chats ADD COLUMN IF NOT EXISTS phone text;
+
+-- Calls on the platform's shared voice agent: which business each call (by our call id or Sarvam's interaction id) went to
+CREATE TABLE IF NOT EXISTS voice_call_routes (
+  ref text PRIMARY KEY,
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Central mailbox read over IMAP (email_inbox.py): the newest message already handled, so each email is read once
+CREATE TABLE IF NOT EXISTS mailbox_cursors (
+  mailbox text PRIMARY KEY,
+  uid_validity bigint NOT NULL,
+  last_uid bigint NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 

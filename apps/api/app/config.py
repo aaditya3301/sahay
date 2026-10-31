@@ -73,14 +73,26 @@ class Settings(BaseSettings):
     email_from: str = ""  # "Sahay <support@yourdomain.com>": a sender verified in Brevo
     inbound_email_domain: str = ""  # Brevo inbound parsing domain (MX → inbound1/2.sendinblue.com), e.g. reply.yourdomain.com
     email_webhook_token: str = ""  # Brevo sends it as "Authorization: Bearer ..." on our email webhooks
+    # Central mailbox read over IMAP (email_inbox.py): customers write to it, every new email becomes a ticket.
+    # Gmail: turn on 2-Step Verification, then Google Account → Security → App passwords.
+    email_imap_host: str = "imap.gmail.com"
+    email_imap_user: str = ""  # the mailbox address
+    email_imap_password: str = ""  # its app password
+    email_poll_seconds: int = 20
+    email_smtp_host: str = "smtp.gmail.com"  # replies go out from the same mailbox when no Brevo key is set
 
     # Optional third parties
     firecrawl_api_key: str = ""
 
     # Shared secret for Cloud Scheduler → /internal/cron/*
     cron_secret: str = ""
-    # Platform key for the voice pipeline when it routes calls by dialled number (per-business keys also work)
+    # Customer follow-ups (lifecycle.py) are off for now: no delay alerts, COD confirmations, cart reminders, lead follow-up
+    # drafts, auto-dialled callbacks, daily summary or monthly newsletter draft. AUTOMATIONS_PAUSED=false turns them back on.
+    automations_paused: bool = True
+    # Platform key for the voice pipeline and the platform's own Sarvam agent (hooks carry ?k=<key>): a call then goes to the
+    # business that knows the caller's number, else the one that owns the dialled number (per-business keys also work)
     voice_platform_key: str = ""
+    voice_default_tenant: str = ""  # business slug for callers no business knows yet
     # LiveKit + Sarvam voice agent (voice_agent.py runs as a LiveKit worker; voice_livekit.py is the API side)
     livekit_url: str = ""  # wss://<project>.livekit.cloud
     livekit_api_key: str = ""

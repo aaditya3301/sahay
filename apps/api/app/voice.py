@@ -31,8 +31,9 @@ VOICE_RULES = """Phone call rules:
 - Speak {language}. Match the caller if they switch language.
 - Before a tool call you may say a short filler like "ek second, check kar rahi hoon".
 - Repeat numbers back digit by digit to confirm (order numbers, phone numbers, amounts).
-- Orders: before sharing any order detail or changing an order, ask for the order ID and call verify_order (with the mobile number they
-  ordered with if they're calling from another phone). Continue only if it matches; never say whether an order exists before that.
+- Orders: the caller's own orders (recent_orders, list_customer_orders) were placed with the number they're calling from, so you can
+  talk about and help with them directly. For any other order, ask for the order ID and call verify_order (with the mobile number they
+  ordered with if they're calling from another phone); continue only if it matches, and never say whether such an order exists before that.
 - Never read out links or long codes: use send_link_whatsapp (it sends on Telegram) and tell them to check Telegram.
 - If they ask for a person, are very upset, or it's a legal/sensitive matter, use transfer_to_human.
 - Let them interrupt; answer the latest thing they said.
@@ -48,6 +49,9 @@ PURPOSE_GOALS = {
     "cod_confirmation": "This is an outbound call to confirm a cash-on-delivery order before it ships. Confirm the order (confirm_cod) or note the cancellation request.",
     "callback": "This is an outbound callback the customer asked for. Topic: {topic}. Help them and capture next steps.",
     "check_in": "This is a short follow-up call after a resolved issue. Ask if everything is fine now.",
+    "sales_call": "This is an outbound sales call to a business that isn't a customer yet ({topic}). Say who you are and why you're calling in one "
+                  "line, ask if it's a good time, learn what they need, and offer to send details or book a callback. Never push; if they're "
+                  "not interested, thank them and end the call.",
 }
 
 
@@ -70,8 +74,14 @@ async def _caller_context(db, customer: dict | None, phone: str | None, exclude_
         return ctx
     ctx["name"] = customer.get("display_name")
     ctx["vip"] = customer.get("vip")
-    if phone:  # only a count: order details are shared after the caller verifies the order id (tools.verify_order)
-        ctx["orders_on_file"] = await db.val("SELECT count(*) FROM commerce_orders WHERE customer_phone=:p", p=phone)
+    if phone:  # the call comes from the number on these orders, so they are the caller's own (other orders need verify_order)
+        ctx["orders_on_file"] = await db.val("SELECT count(*) FROM commerce_orders WHERE customer_phone=:p AND status <> 'payment_pending'", p=phone)
+        ctx["recent_orders"] = [
+            {"order_ref": o["order_ref"], "items": ", ".join(i.get("title", "") for i in (o["line_items"] or [])[:3]), "status": o["status"],
+             "shipment_status": o["shipment_status"], "expected_delivery": o["expected_delivery"], "total_inr": o["total_paise"] / 100}
+            for o in await db.all("SELECT order_ref, line_items, status, shipment_status, expected_delivery, total_paise FROM commerce_orders "
+                                  "WHERE customer_phone=:p AND status <> 'payment_pending' ORDER BY placed_at DESC NULLS LAST LIMIT 3", p=phone)
+        ]
     ctx["open_tickets"] = [
         {"number": t["number"], "intent": t["intent"], "summary": t["summary"], "status": t["status"]}
         for t in await db.all("SELECT number, intent, summary, status FROM tickets WHERE customer_id=:c AND status NOT IN ('resolved','closed') "
@@ -107,13 +117,16 @@ async def start_call(tenant_id: str, *, direction: str, from_number: str | None,
         context = await _caller_context(db, customer, caller, exclude_ticket=ticket["id"])
         goal_ctx = (existing or {}).get("context") or {}
         if existing:
-            call = await db.one("UPDATE voice_calls SET status='in_progress', started_at=now(), conversation_id=:cv, ticket_id=:tk, customer_id=:c "
-                                "WHERE id=:id RETURNING *", cv=conv["id"], tk=ticket["id"], c=customer["id"], id=call_id)
+            call = await db.one("UPDATE voice_calls SET status='in_progress', started_at=now(), conversation_id=:cv, ticket_id=:tk, customer_id=:c, "
+                                "context = context || :x WHERE id=:id RETURNING *", cv=conv["id"], tk=ticket["id"], c=customer["id"], x=context, id=call_id)
         else:
+            # a sales lead who hasn't bought yet calling in: the call belongs on Sales → Calls, not with customer support
+            lead = await db.val("SELECT id FROM leads WHERE customer_id=:c AND stage NOT IN ('customer','dropped') ORDER BY created_at DESC LIMIT 1",
+                                c=customer["id"])
             call = await db.one(
-                "INSERT INTO voice_calls (tenant_id, direction, purpose, from_number, to_number, customer_id, ticket_id, conversation_id, status, context, started_at) "
-                "VALUES (:t,:d,:p,:f,:to,:c,:tk,:cv,'in_progress',:x, now()) RETURNING *",
-                t=tenant_id, d=direction, p=purpose, f=norm_phone(from_number), to=norm_phone(to_number), c=customer["id"], tk=ticket["id"],
+                "INSERT INTO voice_calls (tenant_id, direction, purpose, from_number, to_number, customer_id, lead_id, ticket_id, conversation_id, status, context, started_at) "
+                "VALUES (:t,:d,:p,:f,:to,:c,:l,:tk,:cv,'in_progress',:x, now()) RETURNING *",
+                t=tenant_id, d=direction, p=purpose, f=norm_phone(from_number), to=norm_phone(to_number), c=customer["id"], l=lead, tk=ticket["id"],
                 cv=conv["id"], x={**context, "test": test})
         v = prof["voice"]
         name = (context.get("name") or "").split(" ")[0]
@@ -136,8 +149,8 @@ def build_system(prof: dict, srow: dict, context: dict, purpose: str, goal_ctx: 
     return (f"{persona_block(prof, srow)} {srow['business_description']}\nBrand voice: {srow['brand_voice']}\n"
             f"Business hours: {prof['voice'].get('business_hours')}\n{goal}\n"
             f"What we already know about the caller (looked up before the call): {json.dumps(context, default=str)}\n"
-            "orders_on_file is how many orders this number has placed; you don't have their details until the caller gives an order ID and "
-            "verify_order matches. Use tools for orders, stock, price and actions. Policy rules are enforced by the tools; never promise what a tool didn't confirm.\n"
+            "recent_orders are this caller's own latest orders (placed with the number they're calling from). Use tools for orders, stock, "
+            "price and actions. Policy rules are enforced by the tools; never promise what a tool didn't confirm.\n"
             + VOICE_RULES.format(language=lang, ending=STREAM_REPLY.format(script="" if prof["voice"].get("language") == "en" else DEVANAGARI)
                                  if stream else JSON_REPLY))
 
