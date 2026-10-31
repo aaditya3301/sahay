@@ -101,7 +101,7 @@ def variables(started: dict, prof: dict, business: str) -> dict:
     if ctx.get("orders_on_file"):  # details only after verify_order
         bits.append(f"{ctx['orders_on_file']} order(s) on this number: ask for the order ID and verify it before discussing any order.")
     for t in tickets[:2]:
-        bits.append(f"Open ticket #{t['number']} ({t['intent']}): {t['summary']}.")
+        bits.append(f"Open ticket #{t['number']}" + (f" ({t['intent']})" if t.get("intent") else "") + (f": {t['summary']}" if t.get("summary") else "") + ".")
     if ctx.get("lead"):
         bits.append(f"Sales lead, stage {ctx['lead'].get('stage')}, interest: {ctx['lead'].get('interest')}.")
     return {
