@@ -301,7 +301,7 @@ async def send_campaign(tenant_id: str, campaign_id: str) -> None:
             else:
                 text += "\n\nReply STOP to stop offers."
             msg = await send_to_customer(db, conv, text, None, "ai", f"Campaign: {c['name']}", subject=c.get("subject") or c["name"])
-            st = msg["status"] if msg["status"] in ("sent", "simulated") else "failed"
+            st = msg["status"] if msg["status"] in ("sent", "simulated", "skipped") else "failed"
             stats[st] = stats.get(st, 0) + 1
             await db.exec("INSERT INTO campaign_sends (tenant_id, campaign_id, customer_id, status) VALUES (:t,:c,:cu,:s)",
                           t=tenant_id, c=campaign_id, cu=cust["id"], s=st)

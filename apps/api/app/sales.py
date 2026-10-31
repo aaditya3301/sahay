@@ -429,28 +429,35 @@ async def draft_first_email(tenant_id: str, lead_id: str, kind: str = "first") -
 
 async def send_outreach(db, email_id: str, by: str) -> dict:
     """Owner approved the draft → send via Brevo if configured, otherwise record it as simulated."""
-    from app.channels import email_ready, email_send, inbound_address, integration
+    from app.channels import EmailError, email_ready, email_send, inbound_address, integration, undeliverable
 
     em = await db.one("SELECT e.*, l.email AS to_email FROM outreach_emails e JOIN leads l ON l.id=e.lead_id WHERE e.id=:id", id=email_id)
     if em["status"] in ("sent", "simulated"):
         return em
     cfg = await integration(db, "email")
-    status, ext = "simulated", None
-    if email_ready(cfg) and em["to_email"]:
+    status, ext, why = "simulated", None, ""
+    if undeliverable(em["to_email"]):
+        status, why = "skipped", "this address can't receive email (a demo or reserved domain)"
+    elif email_ready(cfg) and em["to_email"]:
+        from app.profile import load_profile
+
+        brand = (await load_profile(db))["sales"].get("sender_name") or await db.val("SELECT name FROM tenants WHERE id=:t", t=db.tenant_id)
         try:
             ext = await email_send(cfg, em["to_email"], em["subject"], em["body"], sender=cfg.get("outreach_from") or None,
-                                   reply_to=cfg.get("reply_to") or cfg.get("inbound_address") or await inbound_address(db.tenant_id),
-                                   tenant_id=db.tenant_id)
+                                   reply_to=cfg.get("reply_to") or await inbound_address(db.tenant_id), tenant_id=db.tenant_id, brand=brand)
             status = "sent"
+        except EmailError as e:
+            status, why = "failed", str(e)
         except Exception as e:
             log.warning("outreach send failed: %s", e)
-            status = "failed"
+            status, why = "failed", "the email service didn't respond; try again"
     row = await db.one("UPDATE outreach_emails SET status=:s, external_id=:x, sent_at=CASE WHEN :s IN ('sent','simulated') THEN now() END "
                        "WHERE id=:id RETURNING *", s=status, x=ext, id=email_id)
     if status in ("sent", "simulated"):
         await db.exec("UPDATE leads SET last_contact_at=now(), stage=CASE WHEN stage IN ('new','qualified') THEN 'contacted' ELSE stage END, "
                       "next_action='Follow up if no reply', next_action_at=now() + make_interval(days => 3), updated_at=now() WHERE id=:l", l=em["lead_id"])
-    await add_event(db, em["lead_id"], "email_sent" if status != "failed" else "email_failed",
-                    f"Email '{em['subject']}' {status}" + (" (email channel not connected yet)" if status == "simulated" else ""), {"by": by})
+    await add_event(db, em["lead_id"], {"failed": "email_failed", "skipped": "email_skipped"}.get(status, "email_sent"),
+                    f"Email '{em['subject']}' {status}" + (" (email channel not connected yet)" if status == "simulated" else f": {why}" if why else ""),
+                    {"by": by, **({"reason": why} if why else {})})
     await audit(db, "human", by, "outreach.sent", "outreach_email", email_id, {"status": status})
     return row
