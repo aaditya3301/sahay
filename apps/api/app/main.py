@@ -63,7 +63,7 @@ async def developer_docs(name: str = "index.html"):
     f = DOCS_DIR / name
     if f.parent != DOCS_DIR or not f.is_file():
         return JSONResponse({"detail": "Not found"}, status_code=404)
-    return FileResponse(f, headers={"Cache-Control": "public, max-age=300"})
+    return FileResponse(f, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/{path:path}", include_in_schema=False)
