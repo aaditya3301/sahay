@@ -38,6 +38,8 @@
 .store-cart-count { font-variant-numeric: tabular-nums; }
 .store-hero { display: grid; grid-template-columns: .9fr 1.1fr; min-height: min(690px, 80svh); margin: 0 var(--store-gutter); border-radius: 24px; overflow: hidden; background: var(--store-field); }
 .store-hero-copy { display: flex; align-items: flex-start; flex-direction: column; justify-content: flex-end; padding: clamp(28px, 4vw, 64px); background: var(--store-ground); }
+/* generated demo stores (not the two hand-designed brands): the shop name sits in the middle of the hero, not pinned to the bottom */
+.storefront:not(.storefront--farm):not(.storefront--loop) .store-hero-copy { justify-content: center; }
 .store-hero--empty { grid-template-columns: 1fr; min-height: 420px; }
 .store-hero--empty .store-hero-copy { background: var(--store-field); }
 .store-hero h1 { font-size: clamp(40px, 4.5vw, 72px); font-weight: 500; line-height: 1.03; letter-spacing: -.06em; animation: store-enter 800ms var(--store-ease) both; }
@@ -68,7 +70,6 @@
 .store-product { min-width: 0; }
 .store-product-image { display: block; width: 100%; aspect-ratio: 1; padding: 0; overflow: hidden; border: 0; border-radius: 20px; background: var(--store-photo); color: var(--store-ink); }
 .store-product-image img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 700ms var(--store-ease); }
-.store-product-image:hover img { transform: scale(1.045); }
 .store-product--selected .store-product-image { outline: 3px solid var(--store-accent); outline-offset: 4px; }
 .store-product-info { padding: 18px 0 0; }
 .store-product h3 { min-height: 2.8em; font-size: 17px; font-weight: 550; line-height: 1.4; letter-spacing: -.02em; }

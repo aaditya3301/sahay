@@ -43,7 +43,6 @@ export default function StoreDemo() {
   const { key } = useParams()
   const [cfg, setCfg] = useState<StoreConfig | null>(null)
   const [products, setProducts] = useState<Product[]>([])
-  const [viewing, setViewing] = useState<string | null>(null)
   const [featuredSku, setFeaturedSku] = useState<string | null>(null)
   const [cart, setCart] = useState<Record<string, number>>({})
   const [checkout, setCheckout] = useState(false)
@@ -189,12 +188,9 @@ export default function StoreDemo() {
   }, [checkout])
 
   const S = () => (window as any).Sahay
-  const openHelp = () => S()?.('open')
-  const ask = (p: Product) => {
-    setViewing(p.sku)
-    S()?.('setContext', { productSku: p.sku, productTitle: p.title })
-    openHelp()
-  }
+  // run something once the chat has finished loading (it loads right after login)
+  const withChat = (fn: () => void) => { let tries = 0; const go = () => { if (S()) fn(); else if (tries++ < 50) setTimeout(go, 150) }; go() }
+  const openHelp = () => needLogin(() => withChat(() => S()('open')))
   const items = Object.entries(cart).filter(([, q]) => q > 0).map(([sku, qty]) => ({ sku, qty }))
   const report = (next: Record<string, number>, who = contact) => {
     const list = Object.entries(next).filter(([, q]) => q > 0).map(([sku, qty]) => ({ sku, qty }))
@@ -295,12 +291,12 @@ export default function StoreDemo() {
           <div className="store-section-heading" data-store-reveal><div><h2 id="store-shop-title">{farm ? 'Your everyday pantry' : 'Find your little favourite'}</h2><p>{farm ? 'Good ingredients. Familiar favourites.' : 'For your wrist, your bag or your favourite person.'}</p></div><span>{products.length} products</span></div>
           <div className="store-products">
             {products.map((p, i) => (
-              <article key={p.sku} className={`store-product ${viewing === p.sku ? 'store-product--selected' : ''}`} data-store-reveal style={{ '--store-delay': `${(i % 4) * 70}ms` } as CSSProperties}>
-                <button className="store-product-image" onClick={() => ask(p)} aria-label={`Ask about ${p.title}`}>
+              <article key={p.sku} className="store-product" data-store-reveal style={{ '--store-delay': `${(i % 4) * 70}ms` } as CSSProperties}>
+                <div className="store-product-image">
                   {p.image ? <img src={p.image} alt={p.title} width="600" height="600" loading="lazy" /> : <span>{p.title}</span>}
-                </button>
+                </div>
                 <div className="store-product-info"><h3>{p.title}</h3><div className="store-product-meta"><span className="store-price">{money(p.price_inr)}</span><span className={p.in_stock === false ? 'store-stock store-stock--out' : 'store-stock'}>{p.in_stock === false ? 'Out of stock' : 'In stock'}</span></div>
-                  <div className="store-product-actions"><button className="store-add" onClick={() => add(p)}>Add to cart{cart[p.sku] ? ` (${cart[p.sku]})` : ''}</button><button className="store-ask" onClick={() => ask(p)}>Ask about this<ArrowRight size={15} /></button></div>
+                  <div className="store-product-actions"><button className="store-add" onClick={() => add(p)}>Add to cart{cart[p.sku] ? ` (${cart[p.sku]})` : ''}</button></div>
                 </div>
               </article>
             ))}
