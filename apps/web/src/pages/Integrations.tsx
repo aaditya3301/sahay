@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, ExternalLink, Eye, MessageCircle, PackageCheck, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import ChannelConnections from '../components/ChannelConnections'
-import { Badge, Button, Card, cx, Empty, Field, inputCls, PageHeader, Spinner, Tabs } from '../components/ui'
+import { useSearchParams } from 'react-router-dom'
+import SettingsPage, { useBusinessSettings } from './Settings'
+import { PersonaTab, useStudioProfile } from './Studio'
+import { Badge, Button, Card, CodeBlock, cx, Empty, Field, inputCls, PageHeader, Spinner, Tabs } from '../components/ui'
 import { api } from '../lib/api'
 import { ago, humanize } from '../lib/format'
 
@@ -11,12 +12,41 @@ const copy = (t: string) => navigator.clipboard.writeText(t)
 const dot = (s: string) => ({ green: 'bg-emerald-500', amber: 'bg-amber-400', red: 'bg-red-500' } as any)[s] || 'bg-slate-300'
 const statusTone = (s: string) => ({ processed: 'green', delivered: 'green', ignored: 'slate', failed: 'red', retrying: 'amber', pending: 'amber' } as any)[s] || 'slate'
 
-function Code({ children }: { children: string }) {
+export default function Integrations() {
+  const [params, setParams] = useSearchParams()
+  const tabs = ['store', 'agent', 'business', 'status']
+  const asked = params.get('tab') === 'voice' ? 'agent' : params.get('tab') || ''  // old ?tab=voice links land on Voice agent
+  const tab = tabs.includes(asked) ? asked : 'store'
+  const setTab = (next: string) => setParams((previous) => { const q = new URLSearchParams(previous); q.set('tab', next); return q }, { replace: true })
+  const studio = useStudioProfile()
+  const business = useBusinessSettings()
+  const store = useStoreConnection()
+  const profileTab = tab === 'agent'
+  const businessTab = tab === 'business'
+  const storeTab = tab === 'store'
   return (
-    <div className="setup-code relative">
-      <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-10 text-[11px] leading-relaxed text-slate-100 scroll-thin">{children}</pre>
-      <button title="Copy" onClick={() => copy(children)} className="absolute right-2 top-2 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"><Copy className="h-3.5 w-3.5" /></button>
-    </div>
+    <>
+      <div className="studio-sticky-header">
+        <PageHeader title="Integrations" subtitle="Your store, channels and agent: everything you set up lives here."
+          actions={profileTab ? <>{studio.save.isSuccess && !studio.dirty && <span className="text-xs text-emerald-700">Saved</span>}{studio.save.isError && <span className="text-xs text-red-600">{(studio.save.error as Error).message}</span>}
+            <Button onClick={() => studio.saveAll()} loading={studio.save.isPending} disabled={!studio.ready}>Save changes</Button></>
+            : businessTab ? <>{business.save.isSuccess && !business.save.isPending && <span className="text-xs text-emerald-700">Saved</span>}{business.save.isError && <span className="text-xs text-red-600">{(business.save.error as Error).message}</span>}
+            <Button onClick={() => business.save.mutate()} loading={business.save.isPending} disabled={!business.ready}>Save changes</Button></>
+            : storeTab ? <>{store.save.isSuccess && !store.save.isPending && <span className="text-xs text-emerald-700">Saved</span>}{store.save.isError && <span role="alert" className="max-w-[320px] text-right text-xs text-red-600">{(store.save.error as Error).message}</span>}
+            <Button onClick={() => store.save.mutate()} loading={store.save.isPending} disabled={!store.data}>{store.save.isPending && store.tab === 'shopify' ? 'Checking with Shopify…' : 'Save changes'}</Button></> : null} />
+        <Tabs value={tab} onChange={setTab} tabs={[
+          { id: 'store', label: 'Store' }, { id: 'agent', label: 'Voice agent' }, { id: 'business', label: 'Business settings' }, { id: 'status', label: 'Connection status' },
+        ]} />
+      </div>
+      <div className="mt-4">
+        {tab === 'store' && <div className="integrations-connect-layout"><StoreConnect form={store} /></div>}
+        {tab === 'agent' && (studio.ready ? <div className="space-y-4">
+          <PersonaTab p={studio.p} setP={studio.setP} setIn={studio.setIn} tenant={studio.data.tenant} />
+        </div> : <Spinner />)}
+        {tab === 'business' && <SettingsPage embedded form={business} />}
+        {tab === 'status' && <Health onManage={(to) => setTab(to)} />}
+      </div>
+    </>
   )
 }
 
@@ -62,23 +92,36 @@ export default function Integrations() {
   )
 }
 
-function Health({ onConnect }: { onConnect: () => void }) {
+// Website chat, email, Telegram and phone calls are set up centrally by Sahay, so they always read as ready here.
+const CENTRAL: Record<string, { label: string; badge: string; detail: string }> = {
+  widget: { label: 'Website chat', badge: 'Ready', detail: 'The website chat is ready to add to your site.' },
+  telegram: { label: 'Telegram bot', badge: 'Agent bot configured', detail: 'Customers can message your agent on Telegram.' },
+  email: { label: 'Email', badge: 'Ready', detail: 'Sahay sends and receives your email for you.' },
+  voice: { label: 'Phone calls', badge: 'Ready', detail: 'Phone calls are set up and managed by Sahay.' },
+}
+const HEALTH_ROWS = ['widget', 'store', 'telegram', 'email', 'voice']
+
+function Health({ onManage }: { onManage: (tab: string) => void }) {
   const { data, isLoading, refetch, isFetching } = useQuery({ queryKey: ['integration-health'], queryFn: () => api('/v1/integrations/health') })
+  const rows = HEALTH_ROWS.map((key) => (data?.checks || []).find((c: any) => c.key === key) || (CENTRAL[key] ? { key, status: 'green', detail: '' } : null)).filter(Boolean)
   return (
     <Card title="Your connections" action={<Button size="sm" variant="secondary" onClick={() => refetch()} loading={isFetching}><RefreshCw className="h-3.5 w-3.5" />Refresh</Button>}>
       {isLoading ? <Spinner /> : (
         <div className="connection-health-list">
-          {(data?.checks || []).map((c: any) => (
-            <div key={c.key} className="connection-health-row">
-              <span className={cx('connection-health-dot', dot(c.status))} aria-hidden="true" />
-              <div><strong>{({ store: 'Your store', widget: 'Website chat', events: 'Order and product updates', webhooks: 'Updates to other systems', voice: 'Phone calls', scheduler: 'Automations' } as Record<string, string>)[c.key] || c.name}</strong>
-                <details><summary>Connection details</summary><p>{c.detail}</p></details>
+          {rows.map((c: any) => {
+            const central = CENTRAL[c.key]
+            const status = central ? 'green' : c.status
+            return (
+              <div key={c.key} className="connection-health-row">
+                <span className={cx('connection-health-dot', dot(status))} aria-hidden="true" />
+                <div><strong>{central?.label || 'Your store'}</strong>
+                  {c.key !== 'voice' && <details><summary>Connection details</summary><p>{central?.detail || c.detail}</p></details>}
+                </div>
+                <Badge tone={status === 'red' ? 'red' : status === 'green' ? 'green' : 'slate'}>{central ? central.badge : status === 'red' ? 'Needs attention' : status === 'green' ? (c.detail.includes('demo store') ? 'Demo mode' : 'Ready') : 'Not connected'}</Badge>
+                {['store', 'voice'].includes(c.key) && <Button size="sm" variant="ghost" onClick={() => onManage(c.key === 'store' ? 'store' : 'agent')}>Manage</Button>}
               </div>
-              <Badge tone={c.status === 'red' ? 'red' : c.status === 'green' ? 'green' : 'slate'}>{c.status === 'red' ? 'Needs attention' : c.status === 'green' ? (c.detail.includes('demo store') ? 'Demo mode' : 'Ready') : ['events', 'webhooks'].includes(c.key) ? 'Optional' : c.key === 'scheduler' ? 'Not run yet' : c.key === 'widget' ? 'No messages yet' : 'Not connected'}</Badge>
-              {['store', 'whatsapp', 'email'].includes(c.key) && <Button size="sm" variant="ghost" onClick={onConnect}>Manage</Button>}
-              {['widget', 'voice'].includes(c.key) && <Link className="setup-text-link" to={`/studio?tab=${c.key === 'widget' ? 'widget' : 'voice'}`}>Set up →</Link>}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </Card>
@@ -92,11 +135,13 @@ const PROVIDERS = [
   { id: 'custom', label: 'Custom website' },
 ]
 
-function Store() {
+/** Store connection form state. The Integrations page header owns the Save button; the setup wizard uses StoreConnect on its own. */
+export function useStoreConnection({ hideDemo = false, onSaved }: { hideDemo?: boolean; onSaved?: () => void } = {}) {
   const qc = useQueryClient()
   const { data } = useQuery({ queryKey: ['settings'], queryFn: () => api('/v1/settings') })
   const current = (data?.integrations || []).find((i: any) => i.kind === 'commerce')?.config || {}
   const active = current.provider || 'mock'
+  const providers = hideDemo ? PROVIDERS.filter((p) => p.id !== 'mock') : PROVIDERS
   const [tab, setTab] = useState<string>('')
   const [f, setF] = useState<Record<string, string>>({})
   useEffect(() => { if (data) { setTab((t) => t || active); setF((x) => ({ ...current, ...x })) } }, [data])
@@ -112,11 +157,19 @@ function Store() {
     <input name={`store-${k}`} autoComplete={secret ? 'new-password' : 'off'} className={inputCls} type={secret ? 'password' : 'text'} placeholder={placeholder} value={f[k] === '••••' ? '' : f[k] || ''}
       onChange={(e) => setF({ ...f, [k]: e.target.value })} />
   )
+  return { data, current, active, providers, tab, setTab, method, setMethod, save, input }
+}
+
+type StoreForm = ReturnType<typeof useStoreConnection>
+
+export function StoreConnect({ hideDemo = false, onSaved, form }: { hideDemo?: boolean; compact?: boolean; onSaved?: () => void; form?: StoreForm }) {
+  const own = useStoreConnection({ hideDemo, onSaved })
+  const { data, current, active, providers, tab, setTab, method, setMethod, save, input } = form || own
   return (
-    <Card title="Connect your store" action={<Badge tone={active === 'mock' ? 'slate' : 'blue'}>Using {PROVIDERS.find((p) => p.id === active)?.label}</Badge>}>
+    <Card title="Connect your store" action={active === 'mock' ? undefined : <Badge tone="green">{active === 'shopify' && current.shop_name ? `Connected to ${current.shop_name}` : `Using ${PROVIDERS.find((p) => p.id === active)?.label}`}</Badge>}>
       {!data ? <Spinner /> : <>
       <p className="setup-intro">Let Sahay look up your products and customer orders.</p>
-      <Field label="Where is your store?"><select className={inputCls} value={tab || active} onChange={(e) => setTab(e.target.value)}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+      <Field label="Where is your store?"><select className={inputCls} value={tab || active} onChange={(e) => setTab(e.target.value)}>{providers.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
       <div className="mt-3 space-y-3 text-sm">
         {tab === 'mock' && <p className="text-slate-600">Explore Sahay without connecting a live store. Choose your store platform above when you’re ready.</p>}
         {tab === 'shopify' && (
@@ -142,11 +195,20 @@ function Store() {
             <a href="/docs#levels" target="_blank" className="setup-text-link">Setup instructions for your developer →</a></div></details>
           </>
         )}
-        <div className="flex items-center gap-2">
-          <Button onClick={() => save.mutate()} loading={save.isPending}>Save connection</Button>
-          {save.isSuccess && <span role="status" className="text-xs text-emerald-700">Connection details saved.</span>}
-          {save.isError && <span className="text-xs text-red-600">{(save.error as Error).message}</span>}
-        </div>
+        {!form && (
+          <div className="flex items-center gap-2">
+            <Button onClick={() => save.mutate()} loading={save.isPending}>{save.isPending && tab === 'shopify' ? 'Checking with Shopify…' : tab === 'shopify' ? 'Connect store' : 'Save connection'}</Button>
+            {save.isError && <span role="alert" className="text-xs text-red-600">{(save.error as Error).message}</span>}
+          </div>
+        )}
+        {save.isSuccess && (
+          <div role="status" className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900">
+            {save.data?.connected
+              ? <>Connected to <b>{save.data.connected.shop_name}</b> ({save.data.connected.shop_domain}). Sahay can now look up your real products and orders.
+                {(save.data.connected.warnings || []).map((w: string) => <div key={w} className="mt-1 text-amber-800">{w}</div>)}</>
+              : 'Connection details saved.'}
+          </div>
+        )}
       </div>
       </>}
     </Card>
