@@ -94,7 +94,7 @@ DEFAULT_VOICE = {
     "enabled": True, "provider": "sarvam", "voice": "female-hinglish", "greeting": "", "business_hours": "10:00-19:00 Mon-Sat",
     "transfer_number": "", "numbers": [], "language": "hinglish", "webhook_url": "",
 }
-DEFAULT_WIDGET = {"allowed_domains": [], "require_otp_for_orders": True, "launcher_text": "Chat with us",
+DEFAULT_WIDGET = {"allowed_domains": [], "require_otp_for_orders": True, "launcher_text": "Chat with us", "theme": "classic",
                   "bot_check": True, "daily_message_cap": 400, "session_message_cap": 40}
 
 

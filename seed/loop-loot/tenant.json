@@ -58,6 +58,10 @@
   },
   "agent": {
     "agent_name": "Lia",
+    "widget": {
+      "theme": "boutique",
+      "launcher_text": "Ask Lia"
+    },
     "persona": "Lia is cheerful and quick, like a college friend who knows every charm in the store. Suggests gift combos.",
     "sales": {
       "icp": "Corporate HR and admin teams ordering festive/onboarding gifts, college fest and club organisers, and small gift shops or cafes in Indian metros that could stock charm sets",

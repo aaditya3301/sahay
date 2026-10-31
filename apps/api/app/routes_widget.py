@@ -171,7 +171,7 @@ async def widget_config(key: str):
     async with tenant_session(tid) as db:
         s = await db.one("SELECT t.name, t.slug, s.brand_color, s.widget_greeting FROM tenant_settings s JOIN tenants t ON t.id=s.tenant_id")
         prof = await load_profile(db)
-    return {**s, "agent_name": prof["agent_name"], "launcher_text": prof["widget"].get("launcher_text")}
+    return {**s, "agent_name": prof["agent_name"], "launcher_text": prof["widget"].get("launcher_text"), "theme": prof["widget"].get("theme")}
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ async def widget_session(body: SessionBody, request: Request):
         "session": _session_token(tid, visitor, body.parent_origin, bool(ids), lead_id), "visitor_id": visitor, "verified": bool(ids),
         "mode": "reply_now" if lead else "widget", "customer_name": cust.get("display_name"),
         "config": {"name": s["name"], "brand_color": s["brand_color"], "greeting": greeting, "agent_name": prof["agent_name"],
-                   "require_otp": prof["widget"].get("require_otp_for_orders", True)},
+                   "require_otp": prof["widget"].get("require_otp_for_orders", True), "theme": prof["widget"].get("theme")},
     })
 
 

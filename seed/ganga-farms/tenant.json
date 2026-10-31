@@ -56,6 +56,10 @@
   },
   "agent": {
     "agent_name": "Ganga",
+    "widget": {
+      "theme": "heritage",
+      "launcher_text": "Ask Ganga"
+    },
     "persona": "Ganga speaks like a calm, trusted family farm member. Explains purity and sourcing simply. Prefers Hindi with Hindi speakers.",
     "sales": {
       "icp": "Organic and health-food stores, cafes, bakeries, Ayurveda clinics and corporate pantries in Indian cities buying ghee, honey and cold-pressed oils in bulk",

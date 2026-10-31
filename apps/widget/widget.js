@@ -35,42 +35,65 @@
     try { window.dispatchEvent(new CustomEvent('sahay:' + name, { detail: data })); } catch (e) {}
   }
 
+  var ICON_CHAT = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.6A8.2 8.2 0 0 1 3 11.5 8.6 8.6 0 0 1 12 3a8.6 8.6 0 0 1 9 8.5Z"/></svg>';
+  var ICON_CLOSE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  // Launcher colours per chat theme (the chat itself is themed inside the iframe)
+  var THEMES = {
+    boutique: { bg: '#362c29', ink: '#fcf7f3', panel: '#fcf7f3', dot: '#e8590c' },
+    heritage: { bg: '#203f2c', ink: '#f4f5ec', panel: '#f4f5ec', dot: '#9cc59a' }
+  };
+
   function setOpen(v) {
     state.open = v;
     if (!state.wrap) return;
-    state.wrap.style.display = v ? 'block' : 'none';
-    state.btn.innerHTML = v ? '&#10005;' : '&#128172;';
-    state.btn.setAttribute('aria-label', v ? 'Close chat' : 'Chat with us');
+    state.wrap.classList.toggle('is-open', v);
+    state.btn.classList.toggle('is-open', v);
+    state.btn.innerHTML = v ? ICON_CLOSE : ICON_CHAT + '<span class="sl-t">' + state.label + '</span><i class="sl-dot"></i>';
+    state.btn.setAttribute('aria-label', v ? 'Close chat' : state.label);
     if (v) { post({ type: 'sahay:opened' }); sendContext(); }
   }
 
   function mount(cfg) {
     var color = cfg.brand_color || '#4f46e5';
+    var t = THEMES[cfg.theme] || { bg: color, ink: '#fff', panel: '#fff', dot: 'transparent' };
+    state.label = String(cfg.launcher_text || 'Chat with us').replace(/[<>&"]/g, '');
     var btn = document.createElement('button');
     btn.id = 'sahay-launcher';
-    btn.setAttribute('aria-label', 'Chat with us');
-    btn.title = cfg.launcher_text || 'Chat with us';
-    btn.innerHTML = '&#128172;';
-    btn.style.cssText = 'position:fixed;right:22px;bottom:22px;width:58px;height:58px;border-radius:50%;border:0;cursor:pointer;z-index:2147483000;' +
-      'font-size:26px;color:#fff;background:' + color + ';box-shadow:0 8px 24px rgba(0,0,0,.25)';
+    btn.type = 'button';
+    btn.title = state.label;
     var css = document.createElement('style');
     css.id = 'sahay-style';
-    css.textContent = '#sahay-frame-wrap{position:fixed;right:22px;bottom:92px;width:380px;max-width:calc(100vw - 24px);height:600px;' +
-      'max-height:calc(100vh - 110px);z-index:2147483000;border-radius:16px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.25);display:none;background:#fff}' +
-      '@media (max-width:480px){#sahay-frame-wrap{right:0;bottom:0;width:100vw;max-width:100vw;height:100%;max-height:100%;border-radius:0}}';
+    css.textContent =
+      '#sahay-launcher{position:fixed;right:22px;bottom:22px;z-index:2147483000;display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 22px 0 18px;' +
+      'border:0;border-radius:999px;cursor:pointer;font:600 15px/1 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:-.01em;' +
+      'color:' + t.ink + ';background:' + t.bg + ';box-shadow:0 12px 32px -8px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.12);transition:transform .25s cubic-bezier(.16,1,.3,1),box-shadow .25s}' +
+      '#sahay-launcher:hover{transform:translateY(-2px);box-shadow:0 16px 36px -8px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.12)}' +
+      '#sahay-launcher:focus-visible{outline:3px solid ' + t.bg + ';outline-offset:3px}' +
+      '#sahay-launcher .sl-dot{position:absolute;top:13px;left:33px;width:8px;height:8px;border-radius:50%;background:' + t.dot + ';box-shadow:0 0 0 2px ' + t.bg + '}' +
+      '#sahay-launcher.is-open{width:56px;padding:0;justify-content:center}' +
+      '#sahay-frame-wrap{position:fixed;right:22px;bottom:90px;width:384px;max-width:calc(100vw - 24px);height:620px;max-height:calc(100vh - 112px);z-index:2147483000;' +
+      'border-radius:22px;overflow:hidden;background:' + t.panel + ';box-shadow:0 30px 80px -20px rgba(20,15,10,.38),0 0 0 1px rgba(0,0,0,.06);display:none;transform-origin:bottom right}' +
+      '#sahay-frame-wrap.is-open{display:block;animation:sahay-in .32s cubic-bezier(.16,1,.3,1)}' +
+      '@keyframes sahay-in{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}' +
+      '@media (prefers-reduced-motion:reduce){#sahay-frame-wrap.is-open{animation:none}}' +
+      '@media (max-width:480px){#sahay-launcher{right:16px;bottom:16px;width:56px;padding:0;justify-content:center}#sahay-launcher .sl-t{display:none}#sahay-launcher.is-open{display:none}' +
+      '#sahay-frame-wrap{right:0;bottom:0;width:100vw;max-width:100vw;height:100%;max-height:100%;border-radius:0}}';
     document.head.appendChild(css);
     var wrap = document.createElement('div');
     wrap.id = 'sahay-frame-wrap';
     var frame = document.createElement('iframe');
     frame.title = (cfg.name || 'Shop') + ' chat';
-    frame.src = BASE + '/w/' + encodeURIComponent(state.key) + '?origin=' + encodeURIComponent(location.origin);
-    frame.allow = 'microphone; clipboard-write';
+    frame.src = BASE + '/w/' + encodeURIComponent(state.key) + '?origin=' + encodeURIComponent(location.origin) +
+      '&theme=' + encodeURIComponent(cfg.theme || 'classic') + '&c=' + encodeURIComponent(color);
+    frame.allow = 'clipboard-write';
     frame.style.cssText = 'width:100%;height:100%;border:0';
     wrap.appendChild(frame);
     document.body.appendChild(wrap);
     document.body.appendChild(btn);
     state.btn = btn; state.wrap = wrap; state.frame = frame;
     btn.onclick = function () { setOpen(!state.open); };
+    setOpen(state.open);
   }
 
   window.addEventListener('message', function (e) {

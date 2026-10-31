@@ -238,9 +238,9 @@ async def seed_agent(tid: str, cfg: dict) -> None:
         prof = await load_profile(db)
         await db.exec("UPDATE tenant_settings SET ticket_prefix=coalesce(ticket_prefix, :p)",
                       p="".join(w[0] for w in cfg["name"].split()[:3]).upper())
-        await db.exec("UPDATE agent_profiles SET agent_name=:n, persona=:p, sales=:s, voice=:v, updated_at=now()",
+        await db.exec("UPDATE agent_profiles SET agent_name=:n, persona=:p, sales=:s, voice=:v, widget=coalesce(widget, '{}'::jsonb) || :w, updated_at=now()",
                       n=a.get("agent_name", "Sahay"), p=a.get("persona", ""), s={**prof["sales"], **a.get("sales", {})},
-                      v={**prof["voice"], **a.get("voice", {})})
+                      v={**prof["voice"], **a.get("voice", {})}, w=a.get("widget", {}))
         for l in a.get("leads", []):
             row, created = await upsert_lead(db, source=l["source"], name=l.get("name"), email=l.get("email"), phone=l.get("phone"),
                                              company=l.get("company"), city=l.get("city"), interest=l.get("interest"), stage=l.get("stage"))
