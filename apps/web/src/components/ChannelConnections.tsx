@@ -1,64 +1,61 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, ExternalLink } from 'lucide-react'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { Badge, Button, Card, Field, inputCls } from './ui'
+import { Badge, Button, Field, inputCls } from './ui'
 
-export default function ChannelConnections({ integrations, showOtherChannels = false, platformEmail = false }: { integrations: any[]; showOtherChannels?: boolean; platformEmail?: boolean }) {
+export function EmailPanel({ integrations, open = false }: { integrations: any[]; platformEmail?: boolean; open?: boolean }) {
   const qc = useQueryClient()
   const config = (kind: string) => integrations.find((item: any) => item.kind === kind)?.config || {}
-  const [em, setEm] = useState({ inbound_address: config('email').inbound_address || '', from: config('email').from || '', api_key: config('email').api_key || '' })
+  const [em, setEm] = useState({ inbound_address: config('email').inbound_address || '', from: config('email').from || '' })
   const save = useMutation({
-    mutationFn: ({ kind, body }: { kind: string; body: any }) => api(`/v1/integrations/${kind}`, { method: 'PUT', body }),
+    mutationFn: (body: typeof em) => api('/v1/integrations/email', { method: 'PUT', body }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['integration-health'] }) },
   })
-  return <Card title="Customer channels" className="channel-connections">
-    <p className="setup-intro">Choose where customers can reach your agent.</p>
-    <TelegramPanel />
-    <details className="connection-disclosure">
-      <summary><span>Email</span><Badge tone={config('email').api_key || platformEmail ? 'green' : 'slate'}>{config('email').api_key ? 'Configured' : platformEmail ? 'Using Sahay\'s Brevo' : 'Set up'}</Badge></summary>
+  // The addresses are only kept on file, so save them as the user goes: when a field loses focus and when the step is left.
+  const latest = useRef(em)
+  latest.current = em
+  const lastSaved = useRef(JSON.stringify(em))
+  const persist = () => {
+    const now = JSON.stringify(latest.current)
+    if (now === lastSaved.current) return
+    lastSaved.current = now
+    const cfg = { ...latest.current }
+    qc.setQueryData(['settings'], (old: any) => old && { ...old, integrations: [...(old.integrations || []).filter((i: any) => i.kind !== 'email'), { kind: 'email', config: cfg, status: 'active' }] })
+    api('/v1/integrations/email', { method: 'PUT', body: cfg }).then(() => qc.invalidateQueries({ queryKey: ['settings'] })).catch(() => { lastSaved.current = '' })
+  }
+  useEffect(() => () => persist(), [])
+  return (
+    <details className="connection-disclosure" open={open}>
+      <summary><span>Email</span><Badge tone="green">Ready</Badge></summary>
       <div className="connection-body">
-        <p>Sahay sends and receives email through Brevo. Your sending address must be verified in Brevo. Leave the key empty to use Sahay's own Brevo account.</p>
+        <p>Add the email addresses you want customers to use. For now Sahay sends and receives your email for you, so these are saved for later.</p>
         <div className="setup-fields">
-          <Field label="Receiving email address"><input className={inputCls} placeholder="yourstore@reply.yourdomain.in" value={em.inbound_address} onChange={(e) => setEm({ ...em, inbound_address: e.target.value })} /></Field>
-          <Field label="Sending email address"><input className={inputCls} placeholder="Your Store <support@yourstore.in>" value={em.from} onChange={(e) => setEm({ ...em, from: e.target.value })} /></Field>
-          <Field label="Brevo API key"><input name="brevo-api-key" placeholder="xkeysib-…" type="password" autoComplete="new-password" className={inputCls} value={em.api_key} onChange={(e) => setEm({ ...em, api_key: e.target.value })} /></Field>
+          <Field label="Receiving email address"><input className={inputCls} type="email" placeholder="Enter email address" autoComplete="off" value={em.inbound_address} onBlur={persist} onChange={(e) => setEm({ ...em, inbound_address: e.target.value })} /></Field>
+          <Field label="Sending email address"><input className={inputCls} type="email" placeholder="Enter email address" autoComplete="off" value={em.from} onBlur={persist} onChange={(e) => setEm({ ...em, from: e.target.value })} /></Field>
         </div>
-        <details className="dashboard-disclosure"><summary>Webhook addresses for your developer</summary><div className="connection-copy-row"><code>{location.origin}/webhooks/email</code><button type="button" className="dashboard-icon-button" aria-label="Copy inbound email webhook address" onClick={() => navigator.clipboard.writeText(`${location.origin}/webhooks/email`)}><Copy size={16} /></button></div><div className="connection-copy-row"><code>{location.origin}/webhooks/email/events</code><button type="button" className="dashboard-icon-button" aria-label="Copy email events webhook address" onClick={() => navigator.clipboard.writeText(`${location.origin}/webhooks/email/events`)}><Copy size={16} /></button></div><p className="text-[11px] text-slate-500">Brevo inbound parsing posts to the first, delivery events to the second.</p></details>
-        <Button size="sm" variant="secondary" onClick={() => save.mutate({ kind: 'email', body: em })} loading={save.isPending && save.variables?.kind === 'email'}>Save email connection</Button>
-        {save.variables?.kind === 'email' && <SaveState saved={save.isSuccess} error={save.error} />}
+        <Button size="sm" variant="secondary" onClick={() => { lastSaved.current = JSON.stringify(em); save.mutate(em) }} loading={save.isPending}>Save email addresses</Button>
+        <SaveState saved={save.isSuccess} error={save.error} />
       </div>
     </details>
-    {showOtherChannels && <>
-      <Link className="connection-destination" to="/studio?tab=widget"><span>Website chat<small>Add the chat widget to your website.</small></span><span aria-hidden="true">→</span></Link>
-      <Link className="connection-destination" to="/studio?tab=voice"><span>Phone calls<small>Connect a number for your voice agent.</small></span><span aria-hidden="true">→</span></Link>
-    </>}
-  </Card>
+  )
 }
 
 // Customers reach the agent on Telegram (@ the platform bot). They verify with order ID + the name on the order.
-function TelegramPanel() {
-  const qc = useQueryClient()
+export function TelegramPanel({ open = true }: { open?: boolean }) {
   const { data: tg, isLoading, error } = useQuery({ queryKey: ['telegram'], queryFn: () => api('/v1/telegram'), retry: false })
-  const connect = useMutation({ mutationFn: () => api('/v1/telegram/connect', { method: 'POST' }), onSuccess: (d) => { qc.setQueryData(['telegram'], d); qc.invalidateQueries({ queryKey: ['integration-health'] }) } })
-  const live = tg?.enabled && tg.webhook_url && tg.webhook_url === tg.webhook_expected
-  return <details className="connection-disclosure" open>
-    <summary><span>Telegram</span><Badge tone={live ? 'green' : tg?.enabled ? 'amber' : 'slate'}>{isLoading ? 'Checking…' : live ? 'Live' : tg?.enabled ? 'Needs connecting' : 'Not set up'}</Badge></summary>
+  return <details className="connection-disclosure" open={open}>
+    <summary><span>Telegram</span><Badge tone={tg?.enabled ? 'green' : 'slate'}>{isLoading ? 'Checking…' : tg?.enabled ? 'Agent bot configured' : 'Not set up'}</Badge></summary>
     <div className="connection-body">
-      <p>Customers message your agent on Telegram. To keep orders private, the bot first asks for the <strong>order ID and the name on the order</strong> (e.g. <code>LL1042 Priya Sharma</code>), then the agent helps with that order using your knowledge, rules and live order data.</p>
-      {error ? <p role="alert" className="text-sm text-red-600">{(error as Error).message}</p> : !tg?.enabled ? (
-        <p className="text-sm text-slate-600">Add <code>TELEGRAM_BOT_TOKEN</code> (from @BotFather) to the server's settings to turn this on.</p>
+      {isLoading ? null : error ? <p role="alert" className="text-sm text-red-600">{(error as Error).message}</p> : !tg?.enabled ? (
+        <p className="text-sm text-slate-600">The Telegram bot isn't set up on this server yet.</p>
       ) : <>
+        <p>Your agent is ready on Telegram. Customers can open the bot below and ask anything: where their order is, questions about your products, returns or replacements.</p>
         <div className="connection-copy-row"><code>{tg.link}</code>
           <a className="dashboard-icon-button" href={tg.link} target="_blank" rel="noreferrer" aria-label="Open the bot in Telegram"><ExternalLink size={16} /></a>
           <button type="button" className="dashboard-icon-button" aria-label="Copy bot link" onClick={() => navigator.clipboard.writeText(tg.link)}><Copy size={16} /></button></div>
-        {!live && <p className="text-sm text-slate-600">{tg.webhook_url ? 'The bot currently sends messages to a different server.' : 'The bot is not pointed at this server yet.'} Connect it so messages reach this dashboard.</p>}
-        {tg.last_error && <p className="text-sm text-amber-700">Telegram reported: {tg.last_error}</p>}
-        <Button size="sm" variant={live ? 'secondary' : 'primary'} onClick={() => connect.mutate()} loading={connect.isPending}>{live ? 'Reconnect bot' : 'Connect bot to this server'}</Button>
-        {connect.error && <p role="alert" className="text-sm text-red-600">{(connect.error as Error).message}</p>}
+        <p className="text-sm text-slate-600">To keep orders private, the bot first asks for the order ID and the name on the order. Share this link on your website, packaging or social pages so customers can find it.</p>
       </>}
-      <p className="text-[11px] text-slate-500">WhatsApp is paused until Meta verifies the business; replies and proactive updates go to Telegram meanwhile.</p>
     </div>
   </details>
 }

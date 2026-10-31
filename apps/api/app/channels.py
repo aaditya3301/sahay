@@ -30,6 +30,10 @@ async def integration(db, kind: str, defaults: bool = True) -> dict:
     """A business's saved connection settings. For Sarvam, anything the business left blank falls back to the platform defaults."""
     from app.core import unseal
 
+    if kind == "email":
+        # For now all email goes through the platform's central account. The addresses a business types in are kept
+        # on file but deliberately not used for sending or receiving.
+        return {}
     row = await db.one("SELECT config FROM integrations WHERE kind=:k AND status='active'", k=kind)
     cfg = unseal((row or {}).get("config") or {})
     if kind == "sarvam" and defaults:

@@ -713,7 +713,7 @@ async def integration_health(ctx: Ctx = CtxDep):
             ("not set up (TELEGRAM_BOT_TOKEN)" if not tg else tg.get("error") or
              (f"@{tg['username']} connected" if tg.get("webhook_url") == tg.get("webhook_expected") else f"@{tg['username']}: webhook not pointed at this server")))
         add("email", "Email", "green" if email_ready(em) else "amber",
-            "connected (Brevo)" if email_ready(em) else "simulated until you add a Brevo key and a verified sender")
+            "connected" if email_ready(em) else "simulated until email sending is set up on this server")
         last_call = await db.val("SELECT max(created_at) FROM voice_calls")
         sarvam_ok = all(sv.get(k) for k in ("api_key", "org_id", "workspace_id", "app_id", "connection_id", "agent_phone_number"))
         add("voice", "Voice agent (Sarvam)", "green" if sarvam_ok else "amber",

@@ -620,7 +620,12 @@ async def setup_demo_store(ctx: Ctx = CtxDep):
 async def put_integration(kind: str, body: dict, ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
         cur = await db.one("SELECT config FROM integrations WHERE kind=:k", k=kind)
-        merged = {**((cur or {}).get("config") or {}), **{k: v for k, v in body.items() if v not in ("••••", None, "")}}
+        if kind == "email":  # only the two addresses are kept (blank clears one); nothing else is accepted
+            body = {k: (v or "").strip() for k, v in body.items() if k in ("inbound_address", "from")}
+            cur = None
+            merged = {k: v for k, v in body.items() if v}
+        else:
+            merged = {**((cur or {}).get("config") or {}), **{k: v for k, v in body.items() if v not in ("••••", None, "")}}
         from app.core import seal, unseal
 
         merged = unseal(seal(merged))
