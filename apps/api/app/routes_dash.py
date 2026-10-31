@@ -599,6 +599,23 @@ async def patch_settings(body: dict, ctx: Ctx = CtxDep):
     return {"ok": True}
 
 
+@router.post("/setup/demo-store")
+async def setup_demo_store(ctx: Ctx = CtxDep):
+    """Setup wizard: generate a demo storefront (AI-written catalogue now, product photos in the background)."""
+    from app import demo_store
+
+    async with tenant_session(ctx.tenant_id) as db:
+        try:
+            products = await demo_store.generate_catalog(db, ctx.tenant_id)
+        except Exception:
+            log.exception("demo store generation failed")
+            raise HTTPException(502, "We couldn't generate the demo store just now. Please try again.")
+    demo_store.start_images(ctx.tenant_id, products)
+    async with system_session() as sdb:
+        key = await sdb.val("SELECT external_key FROM channel_routes WHERE channel='webchat' AND tenant_id=:t LIMIT 1", t=ctx.tenant_id)
+    return {"site_key": key, "store_url": f"/store/{key}", "products": len(products)}
+
+
 @router.put("/integrations/{kind}")
 async def put_integration(kind: str, body: dict, ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
