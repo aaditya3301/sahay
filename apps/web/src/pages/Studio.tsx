@@ -44,13 +44,15 @@ export default function Studio() {
   const saveAll = () => save.mutate({ agent_name: p.agent_name, persona: p.persona, skills: p.skills, custom_tools: p.custom_tools, sales: p.sales, voice: p.voice, widget: p.widget })
   return (
     <>
-      <PageHeader title="Agent Studio" subtitle="Your agent’s voice, skills and channels."
-        actions={<>{save.isSuccess && <span className="text-xs text-emerald-700">Saved</span>}{save.isError && <span className="text-xs text-red-600">{(save.error as Error).message}</span>}
-          <Button onClick={saveAll} loading={save.isPending}>Save changes</Button></>} />
-      <Tabs value={tab} onChange={setTab} tabs={[
-        { id: 'persona', label: 'Persona & sales' }, { id: 'skills', label: 'Skills & tools' }, { id: 'widget', label: 'Website widget' },
-        { id: 'voice', label: 'Voice agent' }, { id: 'playground', label: 'Playground' },
-      ]} />
+      <div className="studio-sticky-header">
+        <PageHeader title="Agent Studio" subtitle="Your agent’s voice, skills and channels."
+          actions={<>{save.isSuccess && <span className="text-xs text-emerald-700">Saved</span>}{save.isError && <span className="text-xs text-red-600">{(save.error as Error).message}</span>}
+            <Button onClick={saveAll} loading={save.isPending}>Save changes</Button></>} />
+        <Tabs value={tab} onChange={setTab} tabs={[
+          { id: 'persona', label: 'Persona & sales' }, { id: 'skills', label: 'Skills & tools' }, { id: 'widget', label: 'Website widget' },
+          { id: 'voice', label: 'Voice agent' }, { id: 'playground', label: 'Playground' },
+        ]} />
+      </div>
       <div className="mt-4">
         {tab === 'persona' && <PersonaTab p={p} setP={setP} setIn={setIn} tenant={data.tenant} />}
         {tab === 'skills' && <SkillsTab p={p} setP={setP} />}
@@ -212,8 +214,8 @@ function WidgetTab({ p, setIn, data }: { p: any; setIn: (k: string, f: string, v
     wordpress: `1. Upload integrations/wordpress/sahay-chat.php to wp-content/plugins/ and activate "Sahay Chat".\n2. Settings → Sahay Chat: paste site key ${key} and your secret key.\n3. Logged-in WooCommerce customers are signed automatically; product pages pass the SKU as context.`,
   }
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="space-y-4">
+    <div className="studio-widget-layout grid gap-4 lg:grid-cols-2">
+      <div className="studio-widget-column space-y-4">
         <Card title="Install on your website">
           <div className="mb-3 flex items-center gap-2 text-sm">Site key <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{key}</code>
             <button onClick={() => copy(key)} className="text-slate-400 hover:text-slate-700"><Copy className="h-3.5 w-3.5" /></button>
@@ -221,12 +223,15 @@ function WidgetTab({ p, setIn, data }: { p: any; setIn: (k: string, f: string, v
           <Tabs value={inst} onChange={setInst} tabs={[{ id: 'script', label: 'Script tag' }, { id: 'npm', label: 'npm' }, { id: 'react', label: 'React' }, { id: 'shopify', label: 'Shopify' }, { id: 'wordpress', label: 'WordPress' }]} />
           <div className="mt-3"><Code>{snippets[inst]}</Code></div>
         </Card>
-        <Card title="Page context">
-          <p className="mb-2 text-xs text-slate-500">Tell the agent what the visitor is looking at, so "is this in stock?" just works. Page URL and title are sent automatically.</p>
-          <Code>{`Sahay('setContext', {\n  productSku: 'CHM-SET-07',\n  cart: [{ sku: 'CHM-BRC-01', qty: 1 }],\n})\nSahay('open')   // open the chat from your own button`}</Code>
-        </Card>
+        <details className="connection-disclosure studio-widget-reference">
+          <summary>Optional page context <span className="setup-summary-note">For product and cart details</span></summary>
+          <div className="studio-widget-disclosure-body">
+            <p className="mb-2 text-xs text-slate-500">Tell the agent what the visitor is looking at, so "is this in stock?" just works. Page URL and title are sent automatically.</p>
+            <Code>{`Sahay('setContext', {\n  productSku: 'CHM-SET-07',\n  cart: [{ sku: 'CHM-BRC-01', qty: 1 }],\n})\nSahay('open')   // open the chat from your own button`}</Code>
+          </div>
+        </details>
       </div>
-      <div className="space-y-4">
+      <div className="studio-widget-column space-y-4">
         <Card title="Security">
           <div className="space-y-3">
             <Field label="Allowed domains (one per line)" hint="The widget only loads on these sites (checked on the server and enforced by the browser). Leave empty to allow any site while testing.">
@@ -242,22 +247,27 @@ function WidgetTab({ p, setIn, data }: { p: any; setIn: (k: string, f: string, v
             </div>
           </div>
         </Card>
-        <Card title="Identity verification (logged-in shoppers)">
-          <p className="mb-2 text-xs text-slate-500">Your server signs the shopper's email (or phone) with your <b>secret key</b>; the widget passes it as <code>userHash</code>. Signed shoppers see their orders without an OTP. <b>Never put the secret key in the browser.</b></p>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{secret || p.secret_key_hint || '—'}</code>
-            {secret && <button onClick={() => copy(secret)} className="text-slate-400 hover:text-slate-700"><Copy className="h-3.5 w-3.5" /></button>}
-            <Button size="sm" variant="secondary" onClick={() => reveal.mutate()} loading={reveal.isPending}><Eye className="h-3.5 w-3.5" />Reveal</Button>
-            <Button size="sm" variant="secondary" loading={rotate.isPending} onClick={() => { if (confirm('Rotate the secret key? Your website, voice pipeline and custom tools must switch to the new key.')) rotate.mutate() }}><RefreshCw className="h-3.5 w-3.5" />Rotate</Button>
-            {(reveal.isError || rotate.isError) && <span className="text-xs text-red-600">{((reveal.error || rotate.error) as Error).message}</span>}
+        <details className="connection-disclosure studio-widget-reference">
+          <summary>Identity verification <span className="setup-summary-note">Optional · logged-in shoppers</span></summary>
+          <div className="studio-widget-disclosure-body">
+            <Card title="Protect order details for logged-in shoppers">
+              <p className="mb-2 text-xs text-slate-500">Your server signs the shopper's email (or phone) with your <b>secret key</b>; the widget passes it as <code>userHash</code>. Signed shoppers see their orders without an OTP. <b>Never put the secret key in the browser.</b></p>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{secret || p.secret_key_hint || '—'}</code>
+                {secret && <button onClick={() => copy(secret)} className="text-slate-400 hover:text-slate-700"><Copy className="h-3.5 w-3.5" /></button>}
+                <Button size="sm" variant="secondary" onClick={() => reveal.mutate()} loading={reveal.isPending}><Eye className="h-3.5 w-3.5" />Reveal</Button>
+                <Button size="sm" variant="secondary" loading={rotate.isPending} onClick={() => { if (confirm('Rotate the secret key? Your website, voice pipeline and custom tools must switch to the new key.')) rotate.mutate() }}><RefreshCw className="h-3.5 w-3.5" />Rotate</Button>
+                {(reveal.isError || rotate.isError) && <span className="text-xs text-red-600">{((reveal.error || rotate.error) as Error).message}</span>}
+              </div>
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium text-slate-500">Node.js</div>
+                <Code>{`import crypto from 'crypto'\nconst userHash = crypto.createHmac('sha256', process.env.SAHAY_SECRET_KEY)\n  .update(customer.email.trim().toLowerCase()).digest('hex')`}</Code>
+                <div className="text-[11px] font-medium text-slate-500">Python</div>
+                <Code>{`import hmac, hashlib, os\nuser_hash = hmac.new(os.environ["SAHAY_SECRET_KEY"].encode(),\n                     customer.email.strip().lower().encode(), hashlib.sha256).hexdigest()`}</Code>
+              </div>
+            </Card>
           </div>
-          <div className="space-y-2">
-            <div className="text-[11px] font-medium text-slate-500">Node.js</div>
-            <Code>{`import crypto from 'crypto'\nconst userHash = crypto.createHmac('sha256', process.env.SAHAY_SECRET_KEY)\n  .update(customer.email.trim().toLowerCase()).digest('hex')`}</Code>
-            <div className="text-[11px] font-medium text-slate-500">Python</div>
-            <Code>{`import hmac, hashlib, os\nuser_hash = hmac.new(os.environ["SAHAY_SECRET_KEY"].encode(),\n                     customer.email.strip().lower().encode(), hashlib.sha256).hexdigest()`}</Code>
-          </div>
-        </Card>
+        </details>
       </div>
     </div>
   )
