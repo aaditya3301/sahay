@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUpRight, BarChart3, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, Code2, FlaskConical, GraduationCap, Inbox, LogOut, Megaphone, Menu, Phone, Plug, Scale, Settings, Shield, Sparkles, Store, Target, Users, X } from 'lucide-react'
+import { ArrowUpRight, BarChart3, Check, CheckSquare, ChevronDown, ChevronRight, Code2, Inbox, LogOut, Megaphone, Menu, Phone, Plug, Settings, Store, Target, Users, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { api, auth } from '../lib/api'
@@ -95,20 +95,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       { to: '/campaigns', label: 'Campaigns', icon: <Megaphone /> },
       { to: '/calls', label: 'Calls', icon: <Phone /> },
     ] },
-    { id: 'agent', label: 'Agent', icon: <Sparkles />, items: [
-      { to: '/studio', label: 'Agent Studio', icon: <Sparkles /> },
-      { to: '/knowledge', label: 'Knowledge', icon: <BookOpen />, count: ov?.gap_suggestions },
-      { to: '/policies', label: 'Policies', icon: <Scale /> },
-      { to: '/learning', label: 'Learning', icon: <GraduationCap /> },
-      { to: '/simulations', label: 'Simulations', icon: <FlaskConical /> },
-    ] },
     { id: 'workspace', label: 'Workspace', icon: <Settings />, items: [
       { to: '/integrations', label: 'Integrations', icon: <Plug /> },
       { to: '/developer', label: 'Developer docs', icon: <Code2 /> },
-      { to: '/security', label: 'Security', icon: <Shield />, count: ov?.security_24h },
-      { to: '/settings', label: 'Settings', icon: <Settings /> },
     ] },
   ]
+  // Pages reached from Integrations → Agent (not in the sidebar): they keep their own title and sit under Workspace
+  const linked = [
+    { to: '/knowledge', label: 'Knowledge' }, { to: '/policies', label: 'Policies' }, { to: '/learning', label: 'Learning' },
+    { to: '/simulations', label: 'Simulations' }, { to: '/security', label: 'Security' }, { to: '/settings', label: 'Business settings' },
+  ]
+  const isProfile = pathname.startsWith('/profile')
   const activeGroup = groups.find((group) => group.items.some((item) => belongsTo(pathname, item.to)))
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => activeGroup?.id || null)
   const page = [...primary, ...groups.flatMap((group) => group.items)].find((item) => belongsTo(pathname, item.to))
