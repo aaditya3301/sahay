@@ -120,8 +120,8 @@ async def load_profile(db) -> dict:
         )
         await register_secret(db, row["secret_key"])
     p = dict(row)
-    p["skills"] = {k: bool((row["skills"] or {}).get(k, True)) for k in SKILLS}
-    p["sales"] = {**DEFAULT_SALES, **(row["sales"] or {})}
+    p["skills"] = {k: True for k in SKILLS}  # all skills are always on: there is no switch for them in the UI
+    p["sales"] = {**DEFAULT_SALES, **(row["sales"] or {}), "capture_leads": True, "save_the_order": True}
     p["voice"] = {**DEFAULT_VOICE, **(row["voice"] or {})}
     p["widget"] = {**DEFAULT_WIDGET, **(row["widget"] or {})}
     p["custom_tools"] = [t for t in (row["custom_tools"] or []) if t.get("name")]
