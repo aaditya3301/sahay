@@ -1,5 +1,6 @@
 """Dashboard API (authenticated, tenant-scoped through RLS)."""
 
+import logging
 from datetime import date, timedelta
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -14,6 +15,7 @@ from app.db import system_session, tenant_session
 from app.pipeline import InboundAttachment, InboundMessage, ingest, send_draft
 from app.tools import ToolContext, propose
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1")
 
 
@@ -290,8 +292,13 @@ class CrawlBody(BaseModel):
 
 @router.post("/kb/crawl")
 async def kb_crawl(body: CrawlBody, ctx: Ctx = CtxDep):
-    async with tenant_session(ctx.tenant_id) as db:
-        ids = await kb.crawl_site(db, body.url)
+    try:
+        async with tenant_session(ctx.tenant_id) as db:
+            ids = await kb.crawl_site(db, body.url)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not ids:
+        raise HTTPException(422, "We couldn't read any pages from that website. Check the address, or add your policies with Write article or Upload PDF / text.")
     return {"documents": len(ids)}
 
 

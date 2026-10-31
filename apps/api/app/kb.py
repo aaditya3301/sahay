@@ -1,13 +1,17 @@
 """Knowledge base: ingest → chunk → embed → hybrid search (pgvector + full text, RRF)."""
 
 import hashlib
+import html
 import io
+import logging
 import re
 
 import httpx
 
 from app import llm
 from app.config import settings
+
+log = logging.getLogger(__name__)
 
 
 def chunk_markdown(md: str, target_chars: int = 1800, overlap: int = 200) -> list[tuple[str, str]]:
@@ -131,26 +135,79 @@ async def fetch_url_markdown(url: str) -> tuple[str, str]:
     return (title_m.group(1).strip() if title_m else url), md
 
 
+def normalize_url(raw: str) -> str:
+    """Accept "beatband.in", "www.beatband.in/pages/faq" or a full URL."""
+    from urllib.parse import urlparse
+
+    u = (raw or "").strip()
+    if not u:
+        raise ValueError("Enter your website address, like yourstore.in")
+    if not re.match(r"^[a-z][a-z\d+.-]*://", u, re.I):
+        u = "https://" + u
+    parsed = urlparse(u)
+    if parsed.scheme not in ("http", "https") or "." not in parsed.netloc or parsed.username:
+        raise ValueError("Enter a website address like yourstore.in")
+    return u
+
+
+async def _search_site_knowledge(db, root_url: str) -> list[str]:
+    """Fallback for sites we can't read directly (JavaScript-only pages, bot blocking): ask Gemini with Google Search
+    to collect what the public web says about this business, and keep it only if it found real content."""
+    from urllib.parse import urlparse
+
+    from google.genai import types
+
+    host = urlparse(root_url).netloc.removeprefix("www.")
+    prompt = (
+        f"Use Google Search to research the online store at {host}. Write a knowledge base article in Markdown for a customer-support agent, "
+        "using ONLY facts found on that website or its public listings: what they sell (product types, materials, price range), "
+        "shipping, delivery times, returns/refund/exchange policy, warranty, payment options (COD, UPI), contact details and common FAQs. "
+        "Use ## headings per topic. If you cannot find a topic, leave it out. Never guess or invent policies. "
+        "If you find nothing about this store, reply with exactly NOT_FOUND."
+    )
+    resp = await llm.generate(model=settings.model_resolver, contents=prompt, temperature=0.1, purpose="kb_site_search",
+                              tenant_id=db.tenant_id, tools=[types.Tool(google_search=types.GoogleSearch())])
+    text = (resp.text or "").strip()
+    if len(text) < 300 or "NOT_FOUND" in text[:40]:
+        return []
+    return [await add_document(db, f"{host} (from web search)", text, "web_search", root_url)]
+
+
 async def crawl_site(db, root_url: str, max_pages: int = 15) -> list[str]:
-    """Fetch the root page plus same-site links that look like help/policy pages."""
+    """Fetch the root page plus same-site links that look like help/policy pages; fall back to a Google-grounded
+    summary when the pages can't be read."""
     from urllib.parse import urljoin, urlparse
 
-    doc_ids = []
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers={"User-Agent": "SahayBot/1.0"}) as c:
-        r = await c.get(root_url)
-    host = urlparse(root_url).netloc
+    root_url = normalize_url(root_url)
+    doc_ids: list[str] = []
     links = {root_url}
-    for href in re.findall(r'href="([^"#]+)"', r.text):
-        u = urljoin(root_url, href)
-        if urlparse(u).netloc == host and re.search(r"faq|help|policy|polic|shipping|return|refund|terms|about|contact|support", u, re.I):
-            links.add(u.split("?")[0])
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (compatible; SahayBot/1.0)"}) as c:
+            r = await c.get(root_url)
+            r.raise_for_status()
+        root_url = str(r.url)  # after redirects (e.g. example.in -> www.example.in)
+        host = urlparse(root_url).netloc
+        links = {root_url}
+        for href in re.findall(r"""href=["']([^"'#]+)["']""", r.text):
+            u = urljoin(root_url, href)
+            if urlparse(u).netloc == host and re.search(r"faq|help|policy|polic|shipping|return|refund|terms|about|contact|support|pages/", u, re.I):
+                links.add(u.split("?")[0])
+    except Exception as e:  # unreachable, blocked, or not a website: try the search fallback below
+        log.warning("crawl of %s failed: %s", root_url, e)
+        links = set()
     for u in list(links)[:max_pages]:
         try:
             title, md = await fetch_url_markdown(u)
+            title = re.sub(r"\s+", " ", html.unescape(title)).strip()[:140] or u
             if len(md) > 200:
                 doc_ids.append(await add_document(db, title, md, "url_crawl", u))
         except Exception:
             continue
+    if not doc_ids:
+        try:
+            doc_ids = await _search_site_knowledge(db, root_url)
+        except Exception as e:
+            log.warning("search fallback for %s failed: %s", root_url, e)
     return doc_ids
 
 
