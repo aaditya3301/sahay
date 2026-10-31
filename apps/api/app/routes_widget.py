@@ -259,6 +259,8 @@ async def widget_session(body: SessionBody, request: Request):
                 await db.exec("UPDATE leads SET stage='engaged', last_contact_at=now(), updated_at=now() WHERE id=:id", id=lead["id"])
         ids = await db.val("SELECT count(*) FROM customer_identities WHERE customer_id=:c AND verified AND kind IN ('phone','email')", c=cust["id"])
     greeting = s["widget_greeting"]
+    if ids and name and not lead:  # a signed-in shopper: say hello properly
+        greeting = f"Hi {name.split(' ')[0]}! {greeting}"
     if lead:
         greeting = f"Hi{' ' + (name or '').split(' ')[0] if name else ''}! Thanks for clicking through from our email 🙌 Ask me anything — products, bulk pricing, or setting up a call."
     return jsonable({

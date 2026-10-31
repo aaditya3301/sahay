@@ -144,6 +144,11 @@ async def resolve_customer(db, msg: InboundMessage) -> dict:
                 )
             if msg.from_name and not row["display_name"]:
                 await db.exec("UPDATE customers SET display_name=:n WHERE id=:c", n=msg.from_name, c=row["id"])
+            if msg.verified and msg.visitor_id:
+                # this browser's chat may still belong to an older anonymous record: a verified login claims it, so what the
+                # shopper types is attributed to them (and the agent knows their verified phone, email and orders)
+                await db.exec("UPDATE customer_identities SET customer_id=:c WHERE kind='webchat_visitor' AND value=:v AND customer_id<>:c",
+                              c=row["id"], v=msg.visitor_id)
             return row
     # new customer — enrich from the store by phone/email
     name = msg.from_name

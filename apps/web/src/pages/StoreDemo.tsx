@@ -143,18 +143,26 @@ export default function StoreDemo() {
     Promise.all([get('/v1/widget/config'), get('/v1/widget/products')])
       .then(([config, catalogue]) => { setCfg(config); setProducts(catalogue) })
       .catch((error) => { if (error.name !== 'AbortError') setLoadError(error.message) })
+    return () => controller.abort()
+  }, [key])
+
+  // The chat is for logged-in shoppers: its launcher only exists while someone is logged in, and goes away on log out.
+  const chat = session?.chat
+  useEffect(() => {
+    if (!key || !chat) return
     const s = document.createElement('script')
-    s.src = '/widget.js'; s.dataset.siteKey = key!; s.async = true
+    // started by hand so it can be given the logged-in shopper (signed by the server): the agent then knows them and their orders
+    s.src = '/widget.js'; s.dataset.manual = '1'; s.async = true
+    s.onload = () => (window as any).Sahay?.('init', { siteKey: key, user: chat.user, userHash: chat.userHash })
     document.body.appendChild(s)
     return () => {
-      controller.abort()
       s.remove()
       document.getElementById('sahay-launcher')?.remove()
       document.getElementById('sahay-frame-wrap')?.remove()
       document.querySelectorAll('[id^="sahay-"]').forEach((e) => e.remove())
       delete (window as any).Sahay
     }
-  }, [key])
+  }, [key, chat?.userHash])
 
   useEffect(() => {
     if (!cfg) return
