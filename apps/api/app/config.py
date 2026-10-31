@@ -88,6 +88,14 @@ class Settings(BaseSettings):
     livekit_agent_name: str = "sahay-voice"
     livekit_sip_trunk_id: str = ""  # outbound trunk for real phone calls (ST_...)
     sarvam_api_key: str = ""  # platform key; a business's own key in Integrations → Sarvam wins
+    # Platform defaults for Sarvam Voice Agents. A business only enters its API key + agent ID; anything it leaves blank comes from here.
+    sarvam_org_id: str = ""
+    sarvam_workspace_id: str = ""
+    sarvam_app_id: str = ""
+    sarvam_app_version: str = ""
+    sarvam_connection_id: str = ""
+    sarvam_agent_phone: str = ""
+    sarvam_deployment_id: str = ""
     voice_api_url: str = ""  # where the worker reaches this API (default http://127.0.0.1:$PORT)
     # Cashfree payments for the demo storefronts (sandbox keys from merchant.cashfree.com → Developers)
     cashfree_app_id: str = ""

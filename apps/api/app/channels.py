@@ -18,11 +18,23 @@ from app.core import inr, norm_phone
 log = logging.getLogger("sahay.channels")
 
 
-async def integration(db, kind: str) -> dict:
+def sarvam_defaults() -> dict:
+    """Platform-wide Sarvam Voice Agents details from the server's environment (blank ones are left out)."""
+    d = {"org_id": settings.sarvam_org_id, "workspace_id": settings.sarvam_workspace_id, "app_id": settings.sarvam_app_id,
+         "app_version": settings.sarvam_app_version, "connection_id": settings.sarvam_connection_id,
+         "agent_phone_number": settings.sarvam_agent_phone, "deployment_id": settings.sarvam_deployment_id}
+    return {k: v for k, v in d.items() if v}
+
+
+async def integration(db, kind: str, defaults: bool = True) -> dict:
+    """A business's saved connection settings. For Sarvam, anything the business left blank falls back to the platform defaults."""
     from app.core import unseal
 
     row = await db.one("SELECT config FROM integrations WHERE kind=:k AND status='active'", k=kind)
-    return unseal((row or {}).get("config") or {})
+    cfg = unseal((row or {}).get("config") or {})
+    if kind == "sarvam" and defaults:
+        cfg = {**sarvam_defaults(), **{k: v for k, v in cfg.items() if v not in (None, "")}}
+    return cfg
 
 
 # ---------------------------------------------------------------------------

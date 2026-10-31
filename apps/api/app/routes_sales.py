@@ -489,12 +489,13 @@ async def sarvam_setup(ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
         prof = await load_profile(db)
         cfg = await integration(db, "sarvam")
+        own = await integration(db, "sarvam", defaults=False)
     specs = {**TOOL_SPECS, **custom_tool_specs(prof)}
     tools = [{"name": n, "description": specs[n]["description"], "parameters": specs[n]["parameters"]} for n in _voice_tools(prof) if n in specs]
     sk = prof["secret_key"] or ""
     return jsonable({**voice_sarvam.template(ctx.tenant_id, tools, f"{sk[:8]}...(your secret key)"),
                      "connected": {k: bool(cfg.get(k)) for k in ("api_key", "org_id", "workspace_id", "app_id", "connection_id", "agent_phone_number")},
-                     "config": {k: cfg.get(k) for k in ("org_id", "workspace_id", "app_id", "app_version", "connection_id", "agent_phone_number")}})
+                     "config": {k: own.get(k) for k in ("org_id", "workspace_id", "app_id", "app_version", "connection_id", "agent_phone_number")}})
 
 
 class DialBody(BaseModel):
