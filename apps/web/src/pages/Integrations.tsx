@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, ExternalLink, Eye, MessageCircle, PackageCheck, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { Copy, Eye, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import DeveloperGuide from '../components/DeveloperGuide'
 import SettingsPage, { useBusinessSettings } from './Settings'
 import { PersonaTab, useStudioProfile } from './Studio'
 import { Badge, Button, Card, CodeBlock, cx, Empty, Field, inputCls, PageHeader, Spinner, Tabs } from '../components/ui'
@@ -54,19 +55,7 @@ export function DeveloperDocs() {
   return (
     <>
       <PageHeader title="Developer docs" subtitle="A clear setup guide for your website, widget, and developer." />
-      <section className="setup-tab-content" aria-label="Developer tools">
-        <p className="setup-intro">Choose what you are connecting. You can share this page with your developer; regular store connections are under Integrations.</p>
-        <div className="developer-start-grid">
-          <a className="developer-start-card" href="/docs#widget" target="_blank" rel="noreferrer"><span className="developer-start-icon"><MessageCircle size={16} /></span><span><strong>Website chat widget</strong><small>Add Sahay chat to your website. No server work needed.</small></span><span aria-hidden="true">→</span></a>
-          <div className="developer-start-card developer-start-details"><div className="developer-start-head"><span className="developer-start-icon"><PackageCheck size={16} /></span><span><strong>Store updates</strong><small>Send order and product changes from your website.</small></span></div><div className="developer-start-links"><a href="/docs#events" target="_blank" rel="noreferrer">Read setup guide <ExternalLink size={14} /></a><a href="/api-docs" target="_blank" rel="noreferrer">API reference <ExternalLink size={14} /></a></div></div>
-          <div className="developer-start-card developer-start-details"><div className="developer-start-head"><span className="developer-start-icon"><Send size={16} /></span><span><strong>Send events to your systems</strong><small>Forward ticket and lead updates to a CRM or backend.</small></span></div><div className="developer-start-links"><a href="/docs#webhooks" target="_blank" rel="noreferrer">Webhook guide <ExternalLink size={14} /></a><a href="/api-docs" target="_blank" rel="noreferrer">API reference <ExternalLink size={14} /></a></div></div>
-        </div>
-        <div className="setup-developer-sections">
-          <details className="connection-disclosure"><summary>Keys for your developer</summary><div><Keys /></div></details>
-          <details className="connection-disclosure"><summary>Order and product updates</summary><div><Events /></div></details>
-          <details className="connection-disclosure"><summary>Webhooks to your systems</summary><div><Webhooks /></div></details>
-        </div>
-      </section>
+      <DeveloperGuide tools={{ keys: <Keys />, events: <Events />, webhooks: <Webhooks /> }} />
     </>
   )
 }

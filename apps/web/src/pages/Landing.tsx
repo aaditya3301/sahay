@@ -41,6 +41,12 @@ const questions = [
   { q: 'Does it speak my customers’ language?', a: 'Sahay is designed for English, Hindi, and Hinglish. It uses the conversation’s language and your business’s tone, so a customer can ask the way they naturally would.' },
 ]
 
+const setup = [
+  { title: 'Introduce your business', text: 'Add your products, FAQs, delivery details, and return policies. Give Sahay the same knowledge you would give a new teammate.' },
+  { title: 'Make it sound like you', text: 'Choose your agent’s name and tone. Set which replies it can send and which decisions should come to you.' },
+  { title: 'Open the conversation', text: 'Connect your website and the channels you use. Review conversations, approve requests, and step in from your inbox.' },
+]
+
 function SahayMark({ small = false }: { small?: boolean }) {
   return <span className={`sahay-wordmark${small ? ' sahay-wordmark--small' : ''}`}>
     <svg viewBox="0 0 36 36" aria-hidden="true" fill="none"><path d="M7 18a11 11 0 0 1 22 0v3a7 7 0 0 1-7 7h-3l-6 4v-5A11 11 0 0 1 7 18Z" fill="currentColor" /><path d="M14 17c1.5 3.2 6.5 3.2 8 0" stroke="var(--sahay-ground)" strokeWidth="2.4" strokeLinecap="round" /></svg>
@@ -127,6 +133,18 @@ export default function Landing() {
           </div>
         </section>
 
+        <section className="sahay-story sahay-story--orders" aria-labelledby="orders-heading">
+          <img className="sahay-story-background" src="/images/sahay-orders-world.webp" alt="" width="1660" height="948" loading="lazy" />
+          <div className="sahay-frame sahay-story-inner">
+            <div className="sahay-story-copy">
+              <h2 id="orders-heading" data-dissolve>Small questions.<br />Big moments.</h2>
+              <p data-dissolve data-delay="80">A birthday gift. A first order. A parcel that’s running late. There’s a person behind every message.</p>
+              <p data-dissolve data-delay="160">Sahay connects the question to your products, orders, and policies, so the answer comes with a useful next step.</p>
+              <a className="sahay-text-link" href="#see-it-work" data-dissolve data-delay="220">Follow a conversation <ArrowUpRight size={18} aria-hidden="true" /></a>
+            </div>
+          </div>
+        </section>
+
         <section className="sahay-showcase sahay-frame" id="see-it-work" aria-labelledby="showcase-heading">
           <div className="sahay-showcase-copy">
             <h2 id="showcase-heading" data-dissolve>A little more<br />understanding.</h2>
@@ -148,6 +166,24 @@ export default function Landing() {
               <div className="sahay-action-result"><Check size={16} aria-hidden="true" /><span>{example.action}</span></div>
             </div>
             <p className="sahay-demo-foot">{example.detail} An illustrative preview, not a live chat.</p>
+          </div>
+        </section>
+
+        <section className="sahay-connected" aria-labelledby="connected-heading">
+          <div className="sahay-frame">
+            <div className="sahay-chapter-intro">
+              <h2 id="connected-heading" data-dissolve>Every channel.<br />One history.</h2>
+              <p data-dissolve data-delay="80">A question on your website can become an email or a call. With a recognised customer, the history stays together, so your team can pick up where it left off.</p>
+            </div>
+            <div className="sahay-history" data-ui aria-label="Illustrative customer history across connected channels">
+              <div className="sahay-history-person" data-dissolve><span className="sahay-person-initial" aria-hidden="true">P</span><div><strong>Priya’s birthday gift</strong><span>One customer, connected history</span></div><span className="sahay-history-caption">Example journey</span></div>
+              <ol className="sahay-history-messages">
+                <li data-dissolve data-delay="60"><span className="sahay-history-label">Website chat</span><p>“A little gift under ₹700?”</p><span>Sahay finds the ₹649 Celestial Charm Set in the catalogue.</span></li>
+                <li data-dissolve data-delay="140"><span className="sahay-history-label">Email</span><p>“Can you check my delivery?”</p><span>The order and earlier conversation give the reply its context.</span></li>
+                <li data-dissolve data-delay="220"><span className="sahay-history-label">Connected voice</span><p>“I’d like to speak to someone.”</p><span>A human can take over with the customer’s history at hand.</span></li>
+              </ol>
+            </div>
+            <p className="sahay-connection-note" data-dissolve>Connect each channel to your workspace. Customer recognition and channel setup determine which history is available.</p>
           </div>
         </section>
 
@@ -177,10 +213,26 @@ export default function Landing() {
           </div>
         </section>
 
+        <section className="sahay-story sahay-story--setup" id="get-started" aria-labelledby="setup-heading">
+          <img className="sahay-story-background" src="/images/sahay-shop-world.webp" alt="" width="1659" height="948" loading="lazy" />
+          <div className="sahay-frame sahay-story-inner">
+            <div className="sahay-story-copy">
+              <h2 id="setup-heading" data-dissolve>A teammate.<br />On your terms.</h2>
+              <p data-dissolve data-delay="70">Start with the business you’ve already built. Make Sahay part of it.</p>
+              <div className="sahay-setup-stages">
+                {setup.map(({ title, text }, i) => <details key={title} name="sahay-setup" open={i === 0 ? true : undefined} data-dissolve data-delay={100 + i * 70}>
+                  <summary>{title}<ChevronDown size={19} aria-hidden="true" /></summary>
+                  <p>{text}</p>
+                </details>)}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="sahay-faq sahay-frame" id="questions" aria-labelledby="faq-heading">
-          <h2 id="faq-heading" data-dissolve>A few good<br />questions.</h2>
+          <div className="sahay-faq-copy"><h2 id="faq-heading" data-dissolve>A few good<br />questions.</h2><p data-dissolve data-delay="60">A little clarity before the first hello.</p></div>
           <div className="sahay-questions">
-            {questions.map(({ q, a }, i) => <details key={q} data-dissolve data-delay={i * 60}>
+            {questions.map(({ q, a }, i) => <details key={q} name="sahay-questions" data-dissolve data-delay={i * 60}>
               <summary>{q}<ChevronDown size={19} aria-hidden="true" /></summary>
               <p>{a}</p>
             </details>)}
