@@ -88,7 +88,7 @@ async def signup(body: Signup):
             raise HTTPException(409, "Email already registered")
         u = await db.one("INSERT INTO users (email, name, password_hash) VALUES (:e,:n,:p) RETURNING *",
                          e=body.email.lower().strip(), n=body.name, p=hash_password(body.password))
-    t = await create_tenant(body.workspace, website_url=body.website_url, business_description=body.business_description)
+    t = await create_tenant(body.workspace, website_url=body.website_url, business_description=body.business_description, setup_done=False)
     async with system_session() as db:
         await db.exec("INSERT INTO tenant_members (tenant_id, user_id, role) VALUES (:t,:u,'owner')", t=t["id"], u=u["id"])
         return {"token": make_token(str(u["id"])), "user": {"id": u["id"], "name": u["name"], "email": u["email"]},

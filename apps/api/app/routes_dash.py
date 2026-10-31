@@ -30,7 +30,8 @@ async def me(ctx: Ctx = CtxDep):
         key = await db.val("SELECT external_key FROM channel_routes WHERE channel='webchat' AND tenant_id=:t LIMIT 1", t=ctx.tenant_id)
     async with tenant_session(ctx.tenant_id) as db:
         prefix = await db.val("SELECT ticket_prefix FROM tenant_settings")
-    return {"user": u, "tenants": tenants, "tenant_id": ctx.tenant_id, "widget_key": key, "ticket_prefix": prefix or "T"}
+        setup_done = await db.val("SELECT setup_done FROM tenant_settings")
+    return {"user": u, "tenants": tenants, "tenant_id": ctx.tenant_id, "widget_key": key, "ticket_prefix": prefix or "T", "setup_done": setup_done is not False}
 
 
 @router.get("/overview")
@@ -584,7 +585,7 @@ async def get_settings(ctx: Ctx = CtxDep):
 
 
 SETTABLE = {"brand_voice", "business_description", "website_url", "default_autonomy", "owner_phone", "owner_wa_approvals",
-            "debounce_ms", "sla_minutes", "brand_color", "widget_greeting", "languages", "ticket_prefix"}
+            "debounce_ms", "sla_minutes", "brand_color", "widget_greeting", "languages", "ticket_prefix", "setup_done"}
 
 
 @router.patch("/settings")

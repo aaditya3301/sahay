@@ -1,7 +1,8 @@
 import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import DashboardLayout from './components/DashboardLayout'
-import { auth } from './lib/api'
+import { api, auth } from './lib/api'
 import Landing from './pages/Landing'
 
 // Keep the public landing page independent of dashboard charts and editors.
@@ -13,6 +14,9 @@ const CustomerDetail = lazy(() => import('./pages/Customers').then((m) => ({ def
 const InboxPage = lazy(() => import('./pages/Inbox'))
 const Insights = lazy(() => import('./pages/Insights'))
 const Integrations = lazy(() => import('./pages/Integrations'))
+const DeveloperDocs = lazy(() => import('./pages/Integrations').then((m) => ({ default: m.DeveloperDocs })))
+const Setup = lazy(() => import('./pages/Setup'))
+const Profile = lazy(() => import('./pages/Profile'))
 const Knowledge = lazy(() => import('./pages/Knowledge'))
 const Leads = lazy(() => import('./pages/Leads'))
 const LeadDetail = lazy(() => import('./pages/Leads').then((m) => ({ default: m.LeadDetail })))
@@ -44,7 +48,13 @@ export default function App() {
 }
 
 function Protected() {
-  if (!auth.get()?.token) return <Navigate to="/login" replace />
+  const { pathname } = useLocation()
+  const signedIn = !!auth.get()?.token
+  const { data: me } = useQuery({ queryKey: ['me', auth.get()?.tenant], queryFn: () => api('/v1/me'), enabled: signedIn })
+  if (!signedIn) return <Navigate to="/login" replace />
+  // A new workspace finishes the setup wizard once, before it sees the dashboard
+  if (pathname === '/setup') return <Setup />
+  if (me && me.setup_done === false) return <Navigate to="/setup" replace />
   return (
     <DashboardLayout>
       <Routes>

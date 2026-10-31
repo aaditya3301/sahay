@@ -649,6 +649,8 @@ ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS subject text;
 -- Per-business ticket numbers (LL-1042) and the business's own integrations
 ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS ticket_prefix text;
 ALTER TABLE commerce_orders ADD COLUMN IF NOT EXISTS tracking_url text;
+-- New workspaces walk through the setup wizard once; every existing workspace counts as set up
+ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS setup_done boolean NOT NULL DEFAULT true;
 ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS ticket_seq int NOT NULL DEFAULT 1000;
 
 -- Events their website sends us (order shipped, product updated, ...). The id makes delivery idempotent.
