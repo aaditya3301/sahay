@@ -13,13 +13,14 @@
 
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
 from pydantic import BaseModel
 
 from app import llm
-from app.channels import integration, send_to_customer, wa_send
+from app.channels import campaign_html, integration, send_to_customer, wa_send
 from app.config import settings
 from app.core import audit, enqueue, inr, norm_email, norm_phone
 from app.db import tenant_session
@@ -267,7 +268,15 @@ async def audience(db, aud: dict, limit: int = 2000) -> dict:
 
 
 class CampaignDraft(BaseModel):
+    subject: str = ""
     message: str
+
+
+# How an email must be laid out: the sender turns blank lines into paragraphs and "- " lines into a bulleted list
+EMAIL_LAYOUT = ("Plain text, no markdown, no links, and laid out like a real email: 'Hi {first_name},' on its own line; then 2 or 3 short "
+                "paragraphs of 1 to 3 sentences each, with a blank line between paragraphs; if you mention products, put each on its own "
+                "line starting with '- ' (name and real price); one clear call to action as its own short paragraph; finish with "
+                "'Warmly,' on one line and the business name on the next. Use {first_name} literally as a placeholder.")
 
 
 async def draft_campaign(tenant_id: str, campaign_id: str) -> None:
@@ -275,15 +284,20 @@ async def draft_campaign(tenant_id: str, campaign_id: str) -> None:
         c = await db.one("SELECT * FROM campaigns WHERE id=:id", id=campaign_id)
         srow = await db.one("SELECT t.name, s.brand_voice, s.business_description FROM tenant_settings s JOIN tenants t ON t.id=s.tenant_id")
         products = await db.all("SELECT title, price_paise, stock FROM commerce_products WHERE stock > 0 ORDER BY title LIMIT 12")
+    if c["channel"] == "email":
+        system = (f"Write one marketing email for {srow['name']} ({srow['business_description']}). Voice: {srow['brand_voice']}. "
+                  "Give a subject line (under 55 characters, no emoji, not in capitals) and the message. Under 130 words. " + EMAIL_LAYOUT +
+                  " Only mention products from the list with their real prices. No fake urgency, no made-up discounts unless the goal states one.")
+    else:
+        system = (f"Write one {c['channel']} marketing message for {srow['name']} ({srow['business_description']}). Voice: {srow['brand_voice']}. "
+                  "Max 5 short lines, one clear call to action, start with 'Hi {first_name}'. Use {first_name} literally as a placeholder. "
+                  "Only mention products from the list with their real prices. No fake urgency, no made-up discounts unless the goal states one.")
     d = await llm.structured(
-        CampaignDraft, model=settings.model_composer, purpose="campaign_draft", tenant_id=tenant_id, temperature=0.7,
-        system=f"Write one {c['channel']} marketing message for {srow['name']} ({srow['business_description']}). Voice: {srow['brand_voice']}. "
-               "Max 5 short lines, one clear call to action, start with 'Hi {first_name}'. Use {first_name} literally as a placeholder. "
-               "Only mention products from the list with their real prices. No fake urgency, no made-up discounts unless the goal states one.",
+        CampaignDraft, model=settings.model_composer, purpose="campaign_draft", tenant_id=tenant_id, temperature=0.7, system=system,
         contents=f"Goal: {c['goal']}\nAudience: {(c['audience'] or {}).get('segment')}\nProducts in stock: "
                  + json.dumps([{"title": p["title"], "price": inr(p["price_paise"])} for p in products], ensure_ascii=False))
     async with tenant_session(tenant_id) as db:
-        await db.exec("UPDATE campaigns SET message=:m WHERE id=:id", m=d.message, id=campaign_id)
+        await db.exec("UPDATE campaigns SET message=:m, subject=coalesce(nullif(:s, ''), subject) WHERE id=:id", m=d.message, s=d.subject.strip(), id=campaign_id)
 
 
 async def send_campaign(tenant_id: str, campaign_id: str) -> None:
@@ -291,17 +305,21 @@ async def send_campaign(tenant_id: str, campaign_id: str) -> None:
         c = await db.one("SELECT * FROM campaigns WHERE id=:id", id=campaign_id)
         aud = await audience(db, {**(c["audience"] or {}), "channel": c["channel"]})
         await db.exec("UPDATE campaigns SET status='sending' WHERE id=:id", id=campaign_id)
+        store = await db.one("SELECT t.name, s.website_url FROM tenant_settings s JOIN tenants t ON t.id=s.tenant_id")
+    site = (store["website_url"] or "").strip()
+    store_url = (site if re.match(r"^https?://", site, re.I) else f"https://{site}") if site and "." in site else None  # the Shop now button
     stats = {"sent": 0, "simulated": 0, "failed": 0, "suppressed": len(aud["suppressed"])}
     for r in aud["eligible"][:500]:
         async with tenant_session(tenant_id) as db:
             cust, conv = await _customer_conv(db, r["customer_name"], r["customer_phone"], r["customer_email"],
                                               "email" if c["channel"] == "email" else "telegram")
             text = c["message"].replace("{first_name}", (r["customer_name"] or "there").split(" ")[0])
-            if c["channel"] == "email":
-                text += f"\n\n—\nDon't want these emails? Unsubscribe: {unsubscribe_url(tenant_id, str(cust['id']))}"
+            page = None
+            if c["channel"] == "email":  # a formatted email: business name on top, paragraphs, optional Shop now button (no unsubscribe link)
+                page = campaign_html(store["name"], text, store_url)
             else:
                 text += "\n\nReply STOP to stop offers."
-            msg = await send_to_customer(db, conv, text, None, "ai", f"Campaign: {c['name']}", subject=c.get("subject") or c["name"])
+            msg = await send_to_customer(db, conv, text, None, "ai", f"Campaign: {c['name']}", subject=c.get("subject") or c["name"], html=page)
             st = msg["status"] if msg["status"] in ("sent", "simulated", "skipped") else "failed"
             stats[st] = stats.get(st, 0) + 1
             await db.exec("INSERT INTO campaign_sends (tenant_id, campaign_id, customer_id, status) VALUES (:t,:c,:cu,:s)",
@@ -414,8 +432,9 @@ async def draft_newsletter(tenant_id: str, force: bool = False) -> dict | None:
     n = await llm.structured(
         Newsletter, model=settings.model_composer, purpose="newsletter", tenant_id=tenant_id, temperature=0.7,
         system=f"Write the monthly email newsletter for {srow['name']} ({srow['business_description']}). Voice: {srow['brand_voice']}. "
-               "Plain text, 120-200 words: a warm hello with {first_name}, this month's bestsellers, one useful tip that answers a common "
-               "customer question, and one soft call to action. Use only the products and prices given. No made-up offers. No links.",
+               "120-200 words: a warm hello with {first_name}, this month's bestsellers (one per line, starting with '- '), one useful tip "
+               "that answers a common customer question, and one soft call to action. Give a short, friendly subject (under 55 characters, "
+               "no emoji). " + EMAIL_LAYOUT + " Use only the products and prices given. No made-up offers.",
         contents=json.dumps({"month": date.today().strftime("%B %Y"), "bestsellers": best,
                              "in_stock": [{"title": p["title"], "price": inr(p["price_paise"])} for p in products],
                              "common_questions": faqs, "website": srow["website_url"]}, default=str, ensure_ascii=False))

@@ -143,13 +143,90 @@ def _mailbox(addr: str) -> dict:
     return out
 
 
-def _html(text: str) -> str:
+_URL = re.compile(r"(https?://[^\s<]+[^\s<.,;:!?)\]])")
+
+
+def _inline(s: str) -> str:
+    """Escape one line of text for HTML and turn web addresses into links."""
     import html
 
-    return "<div style=\"font-family:Arial,sans-serif;font-size:14px;line-height:1.5\">" + html.escape(text).replace("\n", "<br>") + "</div>"
+    return _URL.sub(lambda m: f'<a href="{m.group(1)}" style="color:#226192">{m.group(1)}</a>', html.escape(s))
 
 
-def _smtp_send(sender: str, to: str, subject: str, text: str, reply_to: str, thread: dict) -> str:
+def _blocks(text: str) -> list[str]:
+    """Paragraphs of a plain-text email: blank lines separate them. A long text that came back as one block is cut
+    into short paragraphs at sentence ends, so it still reads like an email."""
+    paras = [p for p in re.split(r"\n\s*\n", text.replace("\r\n", "\n").strip()) if p.strip()]
+    if len(paras) == 1 and "\n" not in paras[0] and len(paras[0]) > 420:
+        paras, cur = [], ""
+        for sentence in re.split(r"(?<=[.!?])\s+", text.strip()):
+            if cur and len(cur) + len(sentence) > 260:
+                paras.append(cur)
+                cur = sentence
+            else:
+                cur = f"{cur} {sentence}".strip()
+        paras.append(cur)
+    return paras
+
+
+def _render(paras: list[str], style: str) -> str:
+    """Paragraphs → <p>; lines that start with "- " become a bulleted list, even right under a lead-in line."""
+    bullet = re.compile(r"^[-•*]\s+")
+    out = []
+    for p in paras:
+        run: list[str] = []  # the current run of lines, all bullets or all text
+
+        def flush() -> None:
+            if not run:
+                return
+            if bullet.match(run[0]):
+                items = "".join(f'<li style="margin:0 0 6px">{_inline(bullet.sub("", ln))}</li>' for ln in run)
+                out.append(f'<ul style="{style};padding-left:22px">{items}</ul>')
+            else:
+                out.append(f'<p style="{style}">' + "<br>".join(_inline(ln) for ln in run) + "</p>")
+            run.clear()
+
+        for ln in (x.strip() for x in p.split("\n")):
+            if ln and run and bool(bullet.match(ln)) != bool(bullet.match(run[0])):
+                flush()
+            if ln:
+                run.append(ln)
+        flush()
+    return "".join(out)
+
+
+def _html(text: str) -> str:
+    """Conversation emails: plain, readable paragraphs."""
+    return ('<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#222">'
+            + _render(_blocks(text), "margin:0 0 14px") + "</div>")
+
+
+def campaign_html(brand: str, text: str, cta_url: str | None = None, cta_label: str = "Shop now") -> str:
+    """A campaign or newsletter as a clean branded email: the business name on top, the message in paragraphs (and a
+    product list), an optional button to the store. There is no unsubscribe link or button."""
+    import html
+
+    body = _render(_blocks(text), "margin:0 0 18px;font-size:16px;line-height:1.7;color:#2b3a42")
+    button = (
+        '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 8px"><tr>'
+        '<td style="background:#ef8557;border-radius:999px">'
+        f'<a href="{html.escape(cta_url, quote=True)}" style="display:inline-block;padding:13px 30px;font-size:15px;font-weight:700;'
+        f'color:#17394e;text-decoration:none">{html.escape(cta_label)}</a></td></tr></table>') if cta_url else ""
+    name = html.escape(brand)
+    return (
+        '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+        '<body style="margin:0;padding:0;background:#f1ede4">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1ede4;padding:28px 12px"><tr><td align="center">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:560px;background:#ffffff;border-radius:18px;overflow:hidden;font-family:Arial,Helvetica,sans-serif">'
+        f'<tr><td style="background:#17394e;padding:24px 32px;color:#ffffff;font-size:21px;font-weight:700;letter-spacing:.2px">{name}</td></tr>'
+        f'<tr><td style="padding:32px 32px 14px">{body}{button}</td></tr>'
+        f'<tr><td style="padding:18px 32px 26px;border-top:1px solid #ece7dc;color:#8a8f93;font-size:12px;line-height:1.5">'
+        f"You're getting this because you've ordered from {name}.</td></tr>"
+        '</table></td></tr></table></body></html>')
+
+
+def _smtp_send(sender: str, to: str, subject: str, text: str, reply_to: str, thread: dict, html_body: str | None = None) -> str:
     """Send through the central mailbox's own SMTP server; returns the Message-ID (a customer's reply quotes it)."""
     import smtplib
     from email.message import EmailMessage
@@ -161,7 +238,7 @@ def _smtp_send(sender: str, to: str, subject: str, text: str, reply_to: str, thr
     for k, v in thread.items():
         msg[k] = v
     msg.set_content(text)
-    msg.add_alternative(_html(text), subtype="html")
+    msg.add_alternative(html_body or _html(text), subtype="html")
     with smtplib.SMTP_SSL(settings.email_smtp_host, 465, timeout=30) as s:
         s.login(settings.email_imap_user, settings.email_imap_password)
         s.send_message(msg)
@@ -170,8 +247,9 @@ def _smtp_send(sender: str, to: str, subject: str, text: str, reply_to: str, thr
 
 async def email_send(cfg: dict, to: str, subject: str, text: str, in_reply_to: str | None = None,
                      sender: str | None = None, reply_to: str | None = None, tenant_id: str | None = None,
-                     brand: str | None = None) -> str | None:
-    """Send one plain-text email; returns the provider's message id (Brevo's is the SMTP Message-ID, which replies quote).
+                     brand: str | None = None, html: str | None = None) -> str | None:
+    """Send one email (plain text, plus `html` when given, else a simple HTML copy of the text); returns the provider's
+    message id (Brevo's is the SMTP Message-ID, which replies quote).
     brand names a bare sender address, so the shop's name shows instead of the platform's mailbox."""
     provider, key = email_key(cfg) or (None, None)
     sender = sender or cfg.get("from") or settings.email_from or settings.email_imap_user
@@ -186,11 +264,11 @@ async def email_send(cfg: dict, to: str, subject: str, text: str, in_reply_to: s
     if provider == "smtp":
         import asyncio
 
-        return await asyncio.to_thread(_smtp_send, sender, to, subject, text, reply_to, thread)
+        return await asyncio.to_thread(_smtp_send, sender, to, subject, text, reply_to, thread, html)
     async with httpx.AsyncClient(timeout=20) as c:
         if provider == "brevo":
             r = await c.post(BREVO_SEND, headers={"api-key": key, "accept": "application/json"}, json={
-                "sender": _mailbox(sender), "to": [{"email": to}], "subject": subject[:250], "textContent": text, "htmlContent": _html(text),
+                "sender": _mailbox(sender), "to": [{"email": to}], "subject": subject[:250], "textContent": text, "htmlContent": html or _html(text),
                 "replyTo": _mailbox(reply_to), **({"headers": thread} if thread else {}), "tags": ["sahay"] + ([f"t:{tenant_id}"] if tenant_id else [])})  # Brevo echoes tags on delivery events
             if r.status_code >= 300:
                 log.warning("brevo send failed: %s %s", r.status_code, r.text[:300])
@@ -217,8 +295,9 @@ async def inbound_address(tenant_id: str) -> str | None:
 # Dispatch
 # ---------------------------------------------------------------------------
 async def send_to_customer(db, conversation: dict, text: str, ticket_id=None, author_type: str = "ai",
-                           author_name: str | None = None, interactive: dict | None = None, subject: str | None = None) -> dict:
-    """Store the outbound message and deliver it on the conversation's channel."""
+                           author_name: str | None = None, interactive: dict | None = None, subject: str | None = None,
+                           html: str | None = None) -> dict:
+    """Store the outbound message and deliver it on the conversation's channel (`html`: a formatted version, for email)."""
     channel = conversation["channel"]
     status, external_id = "sent", None
     customer = await db.one("SELECT * FROM customers WHERE id=:c", c=conversation["customer_id"])
@@ -247,7 +326,8 @@ async def send_to_customer(db, conversation: dict, text: str, ticket_id=None, au
                 external_id = await email_send(cfg, customer["primary_email"], subject or f"Re: {tsubject or 'your request'}", text,
                                                None if subject else (last_in or {}).get("external_id"),
                                                reply_to=cfg.get("reply_to") or await inbound_address(db.tenant_id),
-                                               tenant_id=db.tenant_id, brand=await db.val("SELECT name FROM tenants WHERE id=:t", t=db.tenant_id))
+                                               tenant_id=db.tenant_id, brand=await db.val("SELECT name FROM tenants WHERE id=:t", t=db.tenant_id),
+                                               html=html)
             else:
                 status = "simulated"
         elif channel == "telegram":
