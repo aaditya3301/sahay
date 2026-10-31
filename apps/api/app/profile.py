@@ -88,6 +88,7 @@ SAVE_THE_ORDER_GUIDE = (
 DEFAULT_SALES = {
     "capture_leads": True, "save_the_order": True, "icp": "", "offer": "", "booking_url": "", "sender_name": "",
     "follow_up_days": 3, "cart_reminders": True, "cart_reminder_hours": 1, "newsletter": True,
+    "payee_names": [], "upi_ids": [],  # receipts must be paid to these (plus the business name) to pass the authenticity check
 }
 DEFAULT_VOICE = {
     "enabled": True, "provider": "sarvam", "voice": "female-hinglish", "greeting": "", "business_hours": "10:00-19:00 Mon-Sat",

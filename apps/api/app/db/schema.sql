@@ -690,6 +690,9 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 );
 
 ALTER TABLE IF EXISTS telegram_chats ADD COLUMN IF NOT EXISTS pending_name text;
+-- authenticity screening of every image/PDF a customer sends (see app/authenticity.py)
+ALTER TABLE attachments ADD COLUMN IF NOT EXISTS screening jsonb;
+ALTER TABLE attachments ADD COLUMN IF NOT EXISTS filename text;
 
 -- Telegram chats (global routing, like channel_routes): which business + customer a chat proved it belongs to
 CREATE TABLE IF NOT EXISTS telegram_chats (

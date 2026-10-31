@@ -184,14 +184,18 @@ async def _customer_stats(ctx: ToolContext) -> dict:
 
 async def _evidence(ctx: ToolContext) -> dict:
     rows = await ctx.db.all(
-        "SELECT a.analysis FROM attachments a JOIN messages m ON m.id=a.message_id WHERE m.ticket_id=:t AND a.analysis IS NOT NULL",
-        t=ctx.ticket["id"],
+        "SELECT a.analysis, a.screening FROM attachments a JOIN messages m ON m.id=a.message_id WHERE m.ticket_id=:t "
+        "AND (a.analysis IS NOT NULL OR a.screening IS NOT NULL)", t=ctx.ticket["id"],
     )
     if not rows:
         return {}
     verified = any((r["analysis"] or {}).get("photo_verified") for r in rows)
     reused = any((r["analysis"] or {}).get("reused_image") for r in rows)
-    return {"evidence.photo_verified": verified, "evidence.reused_image": reused}
+    suspicious = any((r["screening"] or {}).get("verdict") in ("suspicious", "likely_fake") for r in rows)
+    doc_ok = any((r["screening"] or {}).get("verdict") == "genuine" and (r["screening"] or {}).get("kind") in
+                 ("payment_receipt", "upi_or_bank_screenshot", "invoice_or_bill") for r in rows)
+    return {"evidence.photo_verified": verified and not suspicious, "evidence.reused_image": reused,
+            "evidence.document_suspicious": suspicious, "evidence.document_verified": doc_ok}
 
 
 async def compute_facts(ctx: ToolContext, action: str, params: dict) -> tuple[dict, dict | None, int]:

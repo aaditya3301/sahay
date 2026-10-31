@@ -75,7 +75,7 @@ async def ticket(tid: str, ctx: Ctx = CtxDep):
         customer = await db.one("SELECT * FROM customers WHERE id=:c", c=t["customer_id"])
         identities = await db.all("SELECT kind, value, verified FROM customer_identities WHERE customer_id=:c", c=t["customer_id"])
         messages = await db.all(
-            "SELECT m.*, (SELECT json_agg(json_build_object('id', a.id, 'kind', a.kind, 'mime', a.mime, 'analysis', a.analysis)) "
+            "SELECT m.*, (SELECT json_agg(json_build_object('id', a.id, 'kind', a.kind, 'mime', a.mime, 'analysis', a.analysis, 'screening', a.screening, 'filename', a.filename)) "
             "FROM attachments a WHERE a.message_id=m.id) AS attachments FROM messages m WHERE m.ticket_id=:t ORDER BY m.created_at", t=tid,
         )
         runs = await db.all("SELECT * FROM agent_runs WHERE ticket_id=:t ORDER BY created_at", t=tid)

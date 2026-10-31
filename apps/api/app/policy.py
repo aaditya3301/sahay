@@ -141,6 +141,8 @@ def invariants(action: str, facts: dict, limits: Limits) -> list[tuple[Decision,
         hits.append(("require_approval", "Customer reached the automatic action limit for 30 days"))
     if _bool(facts.get("evidence.reused_image")):
         hits.append(("require_approval", "Photo was seen before or matches a catalog image"))
+    if money and _bool(facts.get("evidence.document_suspicious")):
+        hits.append(("require_approval", "A photo or document the customer sent failed the authenticity check"))
     return hits
 
 

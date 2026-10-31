@@ -204,9 +204,9 @@ async def ingest(tenant_id: str, msg: InboundMessage) -> dict | None:
                 data, mime = await asyncio.to_thread(_convert_audio, a.data, a.mime)
             uri = await put_media(tenant_id, data, mime)
             await db.exec(
-                "INSERT INTO attachments (tenant_id, message_id, kind, mime, uri, sha256, phash) VALUES (:t,:m,:k,:mi,:u,:s,:p)",
+                "INSERT INTO attachments (tenant_id, message_id, kind, mime, uri, sha256, phash, filename) VALUES (:t,:m,:k,:mi,:u,:s,:p,:f)",
                 t=tenant_id, m=m["id"], k=kind if kind in ("image", "audio") else "document", mi=mime, u=uri,
-                s=sha256(data), p=phash(data) if kind == "image" else None,
+                s=sha256(data), p=phash(data) if kind == "image" else None, f=(a.filename or None),
             )
         await db.exec("UPDATE conversations SET last_inbound_at=now() WHERE id=:c", c=conv["id"])
         debounce = await db.val("SELECT debounce_ms FROM tenant_settings") or 0
@@ -380,6 +380,9 @@ How you work:
 - If the customer threatens legal action, a chargeback or public complaints, or is abusive, call escalate_to_human with a summary (in addition to helping with facts).
 - Prefer resolving fully in this turn (do the allowed action) over asking unnecessary questions.
 - Live data (price, stock, orders, delivery) always comes from a tool call in this turn; policies and FAQs come from search_kb.
+- Every image/PDF the customer sent was checked for authenticity (shown with the attachments). If one is SUSPICIOUS or LIKELY_FAKE,
+  don't refund, replace or give coupons on the strength of it: call escalate_to_human with the reasons. Never accuse the customer or
+  say "fake"; tell them a teammate will verify the document. A GENUINE receipt that matches an order can be relied on.
 
 Company policy summary (enforced in code):
 {policy}
@@ -422,7 +425,7 @@ async def page_context_text(ctx: ToolContext, context: dict | None) -> str:
 
 
 async def run_resolver(ctx: ToolContext, run_id: str, settings_row: dict, triage: Triage, transcript: str,
-                       attachments: list[dict], context: dict | None = None) -> ResolverPlan:
+                       attachments: list[dict], context: dict | None = None, screening: str | None = None) -> ResolverPlan:
     doc = await active_policy(ctx.db)
     policy_text = "\n".join(
         f"- {c['headline']} when {' AND '.join(c['when'])}" for c in (pol.render_rule(r) for r in doc.rules)
@@ -442,13 +445,13 @@ async def run_resolver(ctx: ToolContext, run_id: str, settings_row: dict, triage
     prefetch = await kb.search(ctx.db, triage.search_queries_en + [triage.summary_en])
     ctx.kb_hits.extend(prefetch)
     kb_text = "\n".join(f"[{h['ref']}] {h['heading']}: {h['content'][:900]}" for h in prefetch) or "(no matching articles)"
-    att_text = "\n".join(f"- {a['kind']} attachment id={a['id']}" for a in attachments) or "(none)"
+    att_text = screening or "\n".join(f"- {a['kind']} attachment id={a['id']}" for a in attachments) or "(none)"
     orders = await call_tool(ctx, "list_customer_orders", {})
     user = (
         f"Customer: {ctx.customer.get('display_name') or 'unknown'} (channel: {ctx.conversation['channel']})\n"
         f"Ticket #{ctx.ticket['number']} triage: {triage.model_dump_json()}\n\nConversation:\n{transcript}\n\n"
         f"Customer's recent orders (already looked up): {json.dumps(orders, default=str)}\n\n"
-        f"Attachments in the newest messages:\n{att_text}\n\nKnowledge base results:\n{kb_text}"
+        f"Attachments in the newest messages (with their authenticity check):\n{att_text}\n\nKnowledge base results:\n{kb_text}"
     )
     contents: list = [types.Content(role="user", parts=[types.Part.from_text(text=user)])]
     seq = 0
@@ -736,7 +739,16 @@ async def _run(tenant_id: str, conversation_id: str, upto_message_id: str) -> No
                           dry_run=bool(conv["is_simulation"]), profile=await load_profile(db))
         context = next((m["context"] for m in reversed(new_msgs) if m.get("context")), None)
         try:
-            plan = await run_resolver(ctx, str(run["id"]), srow, triage, transcript, attachments, context)
+            from app import authenticity
+
+            screens = []
+            if attachments:
+                orders = (await call_tool(ctx, "list_customer_orders", {})).get("orders") or []
+                screens = await authenticity.screen_new(ctx, attachments, orders)
+                if screens:
+                    await _step(db, run["id"], 1, "tool", "authenticity_check", {"attachments": len(screens)}, screens, time.perf_counter())
+            plan = await run_resolver(ctx, str(run["id"]), srow, triage, transcript, attachments, context,
+                                      authenticity.for_resolver(screens) if screens else None)
             composed = await compose(ctx, srow, triage, plan, transcript)
             known = json.dumps([ctx.actions, ctx.kb_hits, await call_tool(ctx, "list_customer_orders", {})], default=str)
             problems = guard(composed.reply_text, composed, ctx.actions, customer["primary_phone"], conv["channel"], triage.script, known)

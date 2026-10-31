@@ -265,8 +265,14 @@ async def handle_update(update: dict) -> None:
             atts.append(InboundAttachment(await download(msg["photo"][-1]["file_id"]), "image/jpeg", "photo.jpg"))
         elif msg.get("voice"):
             atts.append(InboundAttachment(await download(msg["voice"]["file_id"]), msg["voice"].get("mime_type") or "audio/ogg", "voice.ogg"))
-        elif msg.get("document") and (msg["document"].get("mime_type") or "").startswith("image/"):
-            atts.append(InboundAttachment(await download(msg["document"]["file_id"]), msg["document"]["mime_type"], msg["document"].get("file_name") or ""))
+        elif (doc := msg.get("document")) and ((doc.get("mime_type") or "").startswith("image/") or doc.get("mime_type") == "application/pdf"):
+            if (doc.get("file_size") or 0) > 10_000_000:
+                await send_text(chat_id, "That file is over 10 MB. Please send a smaller photo or PDF.")
+                return
+            atts.append(InboundAttachment(await download(doc["file_id"]), doc["mime_type"], doc.get("file_name") or ""))
+        elif msg.get("document"):
+            await send_text(chat_id, "I can read photos and PDF files. Please send the receipt or photo as an image or PDF.")
+            return
     except Exception:
         log.warning("telegram media download failed", exc_info=True)
     if not text and not atts:
