@@ -674,10 +674,14 @@ async def _run(tenant_id: str, conversation_id: str, upto_message_id: str) -> No
         history.reverse()
         new_ids = [m["id"] for m in new_msgs]
         attachments = await db.all("SELECT * FROM attachments WHERE message_id = ANY(:ids)", ids=new_ids)
+        # A message only joins a ticket from the same channel: an email never lands in a chat ticket (or the reverse), so every
+        # query stays under the one channel it came from (Queries → Email / Chat / Telegram).
         open_tickets = await db.all(
-            "SELECT id, number, intent, summary, order_refs, updated_at, status FROM tickets WHERE customer_id=:c AND (status NOT IN ('resolved','closed') "
-            "OR (status='resolved' AND resolved_at > now() - interval '7 days')) ORDER BY updated_at DESC LIMIT 5",
-            c=customer["id"],
+            "SELECT t.id, t.number, t.intent, t.summary, t.order_refs, t.updated_at, t.status FROM tickets t WHERE t.customer_id=:c "
+            "AND EXISTS (SELECT 1 FROM messages x WHERE x.ticket_id=t.id AND x.channel=:ch) "
+            "AND (t.status NOT IN ('resolved','closed') OR (t.status='resolved' AND t.resolved_at > now() - interval '7 days')) "
+            "ORDER BY t.updated_at DESC LIMIT 5",
+            c=customer["id"], ch=conv["channel"],
         )
     intents = list(srow["intents"] or []) or DEFAULT_INTENTS
     triage = await run_triage(tenant_id, intents, history, new_msgs, attachments, open_tickets)

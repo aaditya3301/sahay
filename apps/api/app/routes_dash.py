@@ -77,16 +77,17 @@ async def tickets(ctx: Ctx = CtxDep, status: str = "active", q: str = "", sim: b
 # Queries: tickets grouped by the channel the customer wrote (or called) on, with who it came from
 # ---------------------------------------------------------------------------
 QUERY_CHANNELS = {"email": "email", "phone": "voice", "chat": "webchat", "telegram": "telegram"}
-# A ticket shows under every channel the customer used on it, with their latest message there (a question asked in chat
-# and followed up by email is on both pages). An incoming call counts from the moment it rings (its words are only saved
-# when it ends); a call the business made, or a call with a sales lead (Sales → Calls), is not a query. Both need :ch.
+# A query lives under ONE channel: the one its first customer message came in on. (New messages never join a ticket from
+# another channel, see pipeline.py, so an email is never listed under Chat.) An incoming call counts from the moment it
+# rings (its words are only saved when it ends); a call the business made, or a call with a sales lead (Sales → Calls),
+# is not a query. Both constants need the :ch parameter.
 ON_CHANNEL = ("LEFT JOIN LATERAL (SELECT m.channel, coalesce(nullif(m.text, ''), m.transcript, '') AS body, m.sender, m.context, m.created_at "
-              "FROM messages m WHERE m.ticket_id=t.id AND m.direction='in' AND m.channel=:ch ORDER BY m.created_at DESC LIMIT 1) f ON true "
+              "FROM messages m WHERE m.ticket_id=t.id AND m.direction='in' ORDER BY m.created_at LIMIT 1) f ON true "
               "LEFT JOIN LATERAL (SELECT v.direction, v.lead_id, v.from_number, v.summary, v.started_at, v.ended_at, v.status, "
               "coalesce(v.context->>'test', '') IN ('true', '1') AS test_call FROM voice_calls v "
               "WHERE v.ticket_id=t.id ORDER BY v.created_at LIMIT 1) vc ON true ")
-CAME_IN = ("(CASE WHEN :ch = 'voice' THEN coalesce(vc.direction = 'inbound' AND vc.lead_id IS NULL, f.channel IS NOT NULL) "
-           "ELSE f.channel IS NOT NULL END)")
+CAME_IN = ("(CASE WHEN :ch = 'voice' THEN (vc.direction = 'inbound' AND vc.lead_id IS NULL AND coalesce(f.channel, 'voice') = 'voice') "
+           "ELSE f.channel = :ch END)")
 
 
 def _origin(channel: str, r: dict) -> dict:
