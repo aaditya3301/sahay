@@ -19,16 +19,23 @@ export default function Approvals() {
   const sendDraft = useMutation({ mutationFn: (id: string) => api(`/v1/drafts/${id}/send`, { body: {} }), onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }) })
   return (
     <>
-      <PageHeader title="Approvals" subtitle="Actions and replies waiting for approval." />
+      <PageHeader title="Approvals" subtitle="Actions and replies waiting for approval, and what your agent handled on its own." />
       <Card pad={false}>
-        <div className="px-3 pt-1"><Tabs value={status} onChange={setStatus} tabs={[{ id: 'pending', label: 'Pending' }, { id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }]} /></div>
-        {isLoading ? <Spinner /> : !data?.length ? <Empty icon={<CheckSquare className="h-10 w-10" />} title="Nothing waiting">Actions that need your approval will appear here.</Empty> : (
+        <div className="px-3 pt-1"><Tabs value={status} onChange={setStatus} tabs={[{ id: 'pending', label: 'Pending' }, { id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }, { id: 'auto', label: 'Handled by AI' }]} /></div>
+        {isLoading ? <Spinner /> : !data?.length ? (
+          <Empty icon={<CheckSquare className="h-10 w-10" />} title={status === 'auto' ? 'Nothing handled yet' : status === 'pending' ? 'Nothing waiting' : 'Nothing here yet'}>
+            {status === 'auto' ? 'Replies, resolutions and actions your agent completed on its own appear here.' : 'Actions that need your approval will appear here.'}
+          </Empty>
+        ) : (
           <div className="approval-list">
             {data.map((a: any) => (
               <article key={a.id} className="approval-row">
                 <div className="approval-content">
                   <div className="approval-meta">
-                    <Badge tone={a.kind === 'action' ? 'amber' : a.kind === 'handoff' ? 'red' : 'blue'}>{a.kind === 'action' ? humanize(a.action_type) : a.kind === 'handoff' ? 'Handoff to human' : 'Reply draft'}</Badge>
+                    <Badge tone={a.kind === 'action' ? 'amber' : a.kind === 'handoff' ? 'red' : a.kind === 'resolved' ? 'green' : 'blue'}>{
+                      a.kind === 'action' ? humanize(a.action_type) : a.kind === 'handoff' ? 'Handoff to human'
+                        : a.kind === 'resolved' ? 'Resolved by AI' : a.kind === 'replied' ? 'Replied by AI' : 'Reply draft'}</Badge>
+                    {status === 'auto' && a.kind === 'action' && <Badge tone="green">Approved by policy</Badge>}
                     {a.value_paise > 0 && <Badge>{inr(a.value_paise, true)}</Badge>}
                     <Link to={`/tickets/${a.ticket_id}`} className="text-xs font-medium text-brand-700 hover:underline">Ticket {tref(a.number)}</Link>
                     <span className="text-xs text-slate-500">{a.customer_name} · {ago(a.created_at)}</span>

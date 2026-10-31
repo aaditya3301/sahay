@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUpRight, BarChart3, Check, CheckSquare, ChevronDown, ChevronRight, Code2, Inbox, LogOut, Megaphone, Menu, Phone, Plug, Settings, Store, Target, Users, X } from 'lucide-react'
+import { ArrowUpRight, BarChart3, Check, CheckSquare, ChevronDown, ChevronRight, Code2, Inbox, LogOut, Mail, Megaphone, Menu, MessageCircle, MessagesSquare, Phone, Plug, Send, Settings, Store, Target, Users, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { api, auth } from '../lib/api'
@@ -8,6 +8,7 @@ import './DashboardLayout.css'
 
 type NavItem = { to: string; label: string; icon: ReactNode; count?: number }
 type NavGroup = { id: string; label: string; icon: ReactNode; items: NavItem[] }
+const isGroup = (entry: NavItem | NavGroup): entry is NavGroup => 'items' in entry
 const belongsTo = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`) || (to === '/inbox' && pathname.startsWith('/tickets/'))
 
 function Wordmark() {
@@ -96,8 +97,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const storeUrl = storeAddress(settings, me?.widget_key)
   const tenants = me?.tenants || a.tenants || []
   const current = tenants.find((t: any) => t.id === (me?.tenant_id || a.tenant))
-  const primary: NavItem[] = [
+  const openQueries = ov?.open_queries || {}
+  const primary: (NavItem | NavGroup)[] = [
     { to: '/inbox', label: 'Inbox', icon: <Inbox />, count: ov?.open_tickets },
+    // the same conversations, sorted by where the customer reached you from
+    { id: 'queries', label: 'Queries', icon: <MessagesSquare />, items: [
+      { to: '/queries/email', label: 'Email', icon: <Mail />, count: openQueries.email },
+      { to: '/queries/phone', label: 'Phone calls', icon: <Phone />, count: openQueries.phone },
+      { to: '/queries/chat', label: 'Chat', icon: <MessageCircle />, count: openQueries.chat },
+      { to: '/queries/telegram', label: 'Telegram', icon: <Send />, count: openQueries.telegram },
+    ] },
     { to: '/approvals', label: 'Approvals', icon: <CheckSquare />, count: ov?.pending_approvals },
     { to: '/customers', label: 'Customers', icon: <Users /> },
     { to: '/insights', label: 'Insights', icon: <BarChart3 /> },
@@ -119,9 +128,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { to: '/simulations', label: 'Simulations' }, { to: '/security', label: 'Security' }, { to: '/settings', label: 'Business settings' },
   ]
   const isProfile = pathname.startsWith('/profile')
-  const activeGroup = groups.find((group) => group.items.some((item) => belongsTo(pathname, item.to)))
+  const allGroups = [...primary.filter(isGroup), ...groups]
+  const activeGroup = allGroups.find((group) => group.items.some((item) => belongsTo(pathname, item.to)))
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => activeGroup?.id || null)
-  const page = [...primary, ...groups.flatMap((group) => group.items), ...linked, { to: '/profile', label: 'Profile' }].find((item) => belongsTo(pathname, item.to))
+  const page = [...primary.flatMap((entry) => isGroup(entry) ? entry.items : [entry]), ...groups.flatMap((group) => group.items), ...linked, { to: '/profile', label: 'Profile' }]
+    .find((item) => belongsTo(pathname, item.to))
   const parentLabel = isProfile ? 'Account' : activeGroup?.label || (linked.some((item) => belongsTo(pathname, item.to)) ? 'Workspace' : 'Customer care')
   const pageName = pathname.startsWith('/tickets/') ? 'Conversation' : page?.label || 'Inbox'
 
@@ -184,7 +195,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 }
 
 function Sidebar({ primary, groups, pathname, expandedGroup, onExpand, name, email, onNavigate, closeButton }: {
-  primary: NavItem[]; groups: NavGroup[]; pathname: string; expandedGroup: string | null; onExpand: (id: string) => void
+  primary: (NavItem | NavGroup)[]; groups: NavGroup[]; pathname: string; expandedGroup: string | null; onExpand: (id: string) => void
   name?: string; email?: string; onNavigate: () => void; closeButton?: ReactNode
 }) {
   const id = useId()
@@ -193,23 +204,24 @@ function Sidebar({ primary, groups, pathname, expandedGroup, onExpand, name, ema
     <span className="dashboard-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
     {!!item.count && <span className="dashboard-nav-count">{item.count}</span>}
   </NavLink>
+  const navGroup = (group: NavGroup) => {
+    const expanded = expandedGroup === group.id
+    const active = group.items.some((item) => belongsTo(pathname, item.to))
+    const count = group.items.reduce((sum, item) => sum + (item.count || 0), 0)
+    return <div key={group.id} className="dashboard-nav-group">
+      <button type="button" className={cx('dashboard-nav-item dashboard-nav-toggle', active && 'has-active-child')} aria-expanded={expanded} aria-controls={`${id}-${group.id}`} onClick={() => onExpand(group.id)}>
+        <span className="dashboard-nav-icon" aria-hidden="true">{group.icon}</span><span>{group.label}</span>
+        {!expanded && count > 0 && <span className="dashboard-nav-count">{count}</span>}
+        <ChevronDown size={15} className="dashboard-nav-chevron" aria-hidden="true" />
+      </button>
+      <div id={`${id}-${group.id}`} hidden={!expanded} className="dashboard-nav-children">{group.items.map((item) => navItem(item, true))}</div>
+    </div>
+  }
   return <>
     <div className="dashboard-brand"><Link to="/" className="dashboard-brand-link" aria-label="Sahay home" onClick={onNavigate}><Wordmark /></Link>{closeButton}</div>
     <nav className="dashboard-nav scroll-thin" aria-label="Workspace navigation">
-      <div className="dashboard-nav-primary">{primary.map((item) => navItem(item))}</div>
-      <div className="dashboard-nav-groups">{groups.map((group) => {
-        const expanded = expandedGroup === group.id
-        const active = group.items.some((item) => belongsTo(pathname, item.to))
-        const count = group.items.reduce((sum, item) => sum + (item.count || 0), 0)
-        return <div key={group.id} className="dashboard-nav-group">
-          <button type="button" className={cx('dashboard-nav-item dashboard-nav-toggle', active && 'has-active-child')} aria-expanded={expanded} aria-controls={`${id}-${group.id}`} onClick={() => onExpand(group.id)}>
-            <span className="dashboard-nav-icon" aria-hidden="true">{group.icon}</span><span>{group.label}</span>
-            {!expanded && count > 0 && <span className="dashboard-nav-count">{count}</span>}
-            <ChevronDown size={15} className="dashboard-nav-chevron" aria-hidden="true" />
-          </button>
-          <div id={`${id}-${group.id}`} hidden={!expanded} className="dashboard-nav-children">{group.items.map((item) => navItem(item, true))}</div>
-        </div>
-      })}</div>
+      <div className="dashboard-nav-primary">{primary.map((entry) => isGroup(entry) ? navGroup(entry) : navItem(entry))}</div>
+      <div className="dashboard-nav-groups">{groups.map(navGroup)}</div>
     </nav>
     <div className="dashboard-sidebar-bottom">
       <div className="dashboard-account">

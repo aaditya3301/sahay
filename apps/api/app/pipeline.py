@@ -66,6 +66,7 @@ class InboundMessage:
     verified: bool = False  # phone/email proven (Telegram order check, OTP, signed by the business, simulator)
     context: dict | None = None  # what the web visitor is looking at (page, product, cart)
     identity: tuple[str, str] | None = None  # channel account, e.g. ("telegram", chat_id)
+    sender: str | None = None  # how the channel names the sender when it isn't an email or phone, e.g. "@handle" on Telegram
 
 
 PII_PATTERNS = [
@@ -209,9 +210,10 @@ async def ingest(tenant_id: str, msg: InboundMessage) -> dict | None:
         redacted, pii = redact_pii(msg.text or "")
         m = await db.one(
             "INSERT INTO messages (tenant_id, conversation_id, customer_id, direction, channel, author_type, author_name, text, "
-            "text_redacted, external_id, context) VALUES (:t,:c,:cu,'in',:ch,'customer',:n,:tx,:rd,:ex,:cx) RETURNING *",
+            "text_redacted, external_id, context, sender) VALUES (:t,:c,:cu,'in',:ch,'customer',:n,:tx,:rd,:ex,:cx,:sd) RETURNING *",
             t=tenant_id, c=conv["id"], cu=customer["id"], ch=msg.channel, n=customer["display_name"] or msg.from_name,
             tx=msg.text, rd=redacted, ex=msg.external_id, cx=msg.context,
+            sd=msg.sender or (msg.from_email if msg.channel == "email" else msg.from_phone),
         )
         if pii:
             await security_event(db, "pii_redacted", f"Redacted {', '.join(sorted(set(pii)))} before sending to the AI", None, "low")

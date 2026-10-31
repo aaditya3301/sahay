@@ -12,6 +12,7 @@ const Campaigns = lazy(() => import('./pages/Campaigns'))
 const Customers = lazy(() => import('./pages/Customers'))
 const CustomerDetail = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomerDetail })))
 const InboxPage = lazy(() => import('./pages/Inbox'))
+const Queries = lazy(() => import('./pages/Queries'))
 const Insights = lazy(() => import('./pages/Insights'))
 const Integrations = lazy(() => import('./pages/Integrations'))
 const DeveloperDocs = lazy(() => import('./pages/Integrations').then((m) => ({ default: m.DeveloperDocs })))
@@ -59,6 +60,8 @@ function Protected() {
       <Routes>
         <Route path="/" element={<Navigate to="/inbox" replace />} />
         <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/queries" element={<Navigate to="/queries/email" replace />} />
+        <Route path="/queries/:channel" element={<Queries />} />
         <Route path="/tickets/:id" element={<TicketPage />} />
         <Route path="/approvals" element={<Approvals />} />
         {/* Retained for internal use; the conversation tester has no frontend navigation entry. */}

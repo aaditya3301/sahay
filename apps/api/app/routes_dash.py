@@ -37,12 +37,17 @@ async def me(ctx: Ctx = CtxDep):
 @router.get("/overview")
 async def overview(ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
-        return await db.one(
+        row = await db.one(
             "SELECT (SELECT count(*) FROM tickets WHERE NOT is_simulation AND status NOT IN ('resolved','closed')) AS open_tickets, "
             "(SELECT count(*) FROM approvals a JOIN tickets t ON t.id=a.ticket_id WHERE a.status='pending' AND NOT t.is_simulation) AS pending_approvals, "
             "(SELECT count(*) FROM security_events WHERE created_at > now()-interval '24 hours') AS security_24h, "
             "(SELECT count(*) FROM kb_gap_suggestions WHERE status='suggested') AS gap_suggestions"
         )
+        # open queries per channel, for the counts beside Queries → Email / Phone calls / Chat / Telegram
+        open_queries = {k: await db.val(f"SELECT count(*) FROM tickets t {ON_CHANNEL}WHERE NOT t.is_simulation "
+                                        f"AND t.status NOT IN ('resolved','closed') AND {CAME_IN}", ch=ch)
+                        for k, ch in QUERY_CHANNELS.items()}
+    return {**row, "open_queries": open_queries}
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +71,83 @@ async def tickets(ctx: Ctx = CtxDep, status: str = "active", q: str = "", sim: b
             q=q, sim=sim,
         )
     return jsonable(rows)
+
+
+# ---------------------------------------------------------------------------
+# Queries: tickets grouped by the channel the customer wrote (or called) on, with who it came from
+# ---------------------------------------------------------------------------
+QUERY_CHANNELS = {"email": "email", "phone": "voice", "chat": "webchat", "telegram": "telegram"}
+# A ticket shows under every channel the customer used on it, with their latest message there (a question asked in chat
+# and followed up by email is on both pages). An incoming call counts from the moment it rings (its words are only saved
+# when it ends); a call the business made, or a call with a sales lead (Sales → Calls), is not a query. Both need :ch.
+ON_CHANNEL = ("LEFT JOIN LATERAL (SELECT m.channel, coalesce(nullif(m.text, ''), m.transcript, '') AS body, m.sender, m.context, m.created_at "
+              "FROM messages m WHERE m.ticket_id=t.id AND m.direction='in' AND m.channel=:ch ORDER BY m.created_at DESC LIMIT 1) f ON true "
+              "LEFT JOIN LATERAL (SELECT v.direction, v.lead_id, v.from_number, v.summary, v.started_at, v.ended_at, v.status, "
+              "coalesce(v.context->>'test', '') IN ('true', '1') AS test_call FROM voice_calls v "
+              "WHERE v.ticket_id=t.id ORDER BY v.created_at LIMIT 1) vc ON true ")
+CAME_IN = ("(CASE WHEN :ch = 'voice' THEN coalesce(vc.direction = 'inbound' AND vc.lead_id IS NULL, f.channel IS NOT NULL) "
+           "ELSE f.channel IS NOT NULL END)")
+
+
+def _origin(channel: str, r: dict) -> dict:
+    """Who the query came from, in words: the address, number, handle or storefront account."""
+    ids = r.get("identities") or []
+
+    def ident(kind: str, verified: bool = False):
+        return next((i["value"] for i in ids if i["kind"] == kind and (i["verified"] or not verified)), None)
+
+    if channel == "email":
+        return {"label": r["sender"] or ident("email") or "Address not recorded", "detail": r.get("email_subject") and f"Subject: {r['email_subject']}"}
+    if channel == "voice":
+        secs = int((r["call_ended_at"] - r["call_started_at"]).total_seconds()) if r["call_started_at"] and r["call_ended_at"] else None
+        length = f"Call lasted {secs // 60}m {secs % 60}s" if secs is not None else "Call in progress" if r["call_status"] == "in_progress" else "Phone call"
+        return {"label": r["from_number"] or r["sender"] or ident("phone") or ("Test call" if r["test_call"] else "Number withheld"),
+                "detail": f"{length} · test call from the dashboard" if r["test_call"] else length}
+    if channel == "telegram":
+        return {"label": r["sender"] or r["customer_name"] or "Telegram user",
+                "detail": f"{r['customer_name']} on Telegram" if r["sender"] and r["customer_name"] else "Telegram · no @username on file"}
+    # website chat: a storefront account is signed and verified; anyone else is an anonymous visitor
+    email = ident("email", verified=True)
+    page = (r.get("context") or {}).get("page_url")
+    if email:
+        return {"label": email, "detail": f"Signed in as {r['customer_name']}" if r["customer_name"] else "Signed-in shopper", "page": page}
+    visitor = ident("webchat_visitor")
+    return {"label": "Website visitor", "detail": f"Not signed in · visitor {visitor[-6:]}" if visitor else "Not signed in", "page": page}
+
+
+@router.get("/queries")
+async def queries(ctx: Ctx = CtxDep, channel: str = "email", status: str = "all", q: str = ""):
+    ch = QUERY_CHANNELS.get(channel)
+    if not ch:
+        raise HTTPException(404, "Unknown channel")
+    where = {"open": "t.status NOT IN ('resolved','closed')", "resolved": "t.status IN ('resolved','closed')"}.get(status, "true")
+    async with tenant_session(ctx.tenant_id) as db:
+        rows = await db.all(
+            "SELECT t.id, t.number, t.subject, t.status, t.intent, t.summary, t.created_at, t.updated_at, "
+            "c.id AS customer_id, c.display_name AS customer_name, coalesce(f.body, '') AS query, f.sender, f.context, "
+            "coalesce(f.created_at, vc.started_at, t.created_at) AS asked_at, "
+            "vc.from_number, vc.summary AS call_summary, vc.started_at AS call_started_at, vc.ended_at AS call_ended_at, "
+            "vc.status AS call_status, vc.test_call, "
+            "(SELECT count(*) FROM messages m WHERE m.ticket_id=t.id) AS message_count, "
+            "(SELECT json_agg(json_build_object('kind', i.kind, 'value', i.value, 'verified', i.verified)) "
+            " FROM customer_identities i WHERE i.customer_id=c.id) AS identities "
+            f"FROM tickets t JOIN customers c ON c.id=t.customer_id {ON_CHANNEL}"
+            f"WHERE NOT t.is_simulation AND {CAME_IN} AND {where} "
+            "AND (:q = '' OR f.body ILIKE '%' || :q || '%' OR t.summary ILIKE '%' || :q || '%' OR c.display_name ILIKE '%' || :q || '%' "
+            " OR f.sender ILIKE '%' || :q || '%' OR vc.from_number ILIKE '%' || :q || '%' OR CAST(t.number AS text)=:q "
+            " OR EXISTS (SELECT 1 FROM customer_identities i WHERE i.customer_id=c.id AND i.value ILIKE '%' || :q || '%')) "
+            "ORDER BY t.updated_at DESC LIMIT 200",
+            ch=ch, q=q.strip(),
+        )
+    out = []
+    for r in rows:
+        if ch == "email" and r["query"].startswith("Subject:"):  # inbound email is stored as "Subject: …" + blank line + body
+            first, _, rest = r["query"].partition("\n")
+            r["email_subject"], r["query"] = first.removeprefix("Subject:").strip(), rest.strip() or first
+        out.append({k: r[k] for k in ("id", "number", "status", "intent", "summary", "subject", "query", "call_summary",
+                                      "asked_at", "updated_at", "customer_id", "customer_name", "message_count")}
+                   | {"origin": _origin(ch, r)})
+    return jsonable(out)
 
 
 @router.get("/tickets/{tid}")
@@ -177,6 +259,8 @@ async def draft_discard(did: str, ctx: Ctx = CtxDep):
 
 @router.get("/approvals")
 async def approvals(ctx: Ctx = CtxDep, status: str = "pending"):
+    if status == "auto":
+        return await handled_by_ai(ctx)
     async with tenant_session(ctx.tenant_id) as db:
         rows = await db.all(
             "SELECT a.*, t.number, t.intent, t.urgency, t.frustration_score, c.display_name AS customer_name, "
@@ -186,6 +270,30 @@ async def approvals(ctx: Ctx = CtxDep, status: str = "pending"):
             "WHERE a.status=:s AND NOT t.is_simulation ORDER BY a.created_at DESC LIMIT 200", s=status,
         )
     return jsonable(rows)
+
+
+async def handled_by_ai(ctx: Ctx) -> list:
+    """What the agent did on its own in the last 30 days (nobody had to approve it): actions the policy allowed, and
+    conversations it answered or resolved. Shown beside Approved / Rejected so the owner sees everything that was decided."""
+    async with tenant_session(ctx.tenant_id) as db:
+        actions = await db.all(
+            "SELECT ac.id, 'action' AS kind, ac.ticket_id, t.number, t.frustration_score, c.display_name AS customer_name, ac.created_at, "
+            "ac.type AS action_type, ac.value_paise, coalesce(ac.decision_reason, t.summary) AS summary "
+            "FROM actions ac JOIN tickets t ON t.id=ac.ticket_id JOIN customers c ON c.id=t.customer_id "
+            "WHERE ac.status='succeeded' AND ac.proposed_by='ai' AND NOT ac.dry_run AND NOT t.is_simulation "
+            "AND ac.created_at > now() - interval '30 days' AND NOT EXISTS (SELECT 1 FROM approvals a WHERE a.action_id=ac.id) "
+            "ORDER BY ac.created_at DESC LIMIT 100")
+        answered = await db.all(
+            "SELECT t.id, CASE WHEN t.status IN ('resolved','closed') THEN 'resolved' ELSE 'replied' END AS kind, t.id AS ticket_id, t.number, "
+            "t.frustration_score, c.display_name AS customer_name, coalesce(t.resolved_at, r.created_at) AS created_at, t.summary, r.text AS draft_text "
+            "FROM tickets t JOIN customers c ON c.id=t.customer_id "
+            "JOIN LATERAL (SELECT m.text, m.created_at FROM messages m WHERE m.ticket_id=t.id AND m.direction='out' AND m.author_type='ai' "
+            "  ORDER BY m.created_at DESC LIMIT 1) r ON true "
+            "WHERE NOT t.is_simulation AND t.status NOT IN ('escalated','pending_approval') AND t.updated_at > now() - interval '30 days' "
+            "AND NOT EXISTS (SELECT 1 FROM messages h WHERE h.ticket_id=t.id AND h.direction='out' AND h.author_type='human') "
+            "AND NOT EXISTS (SELECT 1 FROM approvals a WHERE a.ticket_id=t.id AND a.status='pending') "
+            "ORDER BY t.updated_at DESC LIMIT 100")
+    return jsonable(sorted(actions + answered, key=lambda r: r["created_at"], reverse=True)[:150])
 
 
 class Decision(BaseModel):
