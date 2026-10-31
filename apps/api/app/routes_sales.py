@@ -256,7 +256,7 @@ async def lead_draft(lid: str, ctx: Ctx = CtxDep, kind: str = "first"):
     async with tenant_session(ctx.tenant_id) as db:
         if not await db.val("SELECT email FROM leads WHERE id=:id", id=lid):
             raise HTTPException(400, "This lead has no email address")
-    enqueue(sales.draft_first_email, ctx.tenant_id, lid, kind, name="draft-email", queue="sales")
+    enqueue(sales.draft_first_email, ctx.tenant_id, lid, kind, True, name="draft-email", queue="sales")
     return {"queued": True}
 
 

@@ -417,7 +417,13 @@ class EmailDraft(BaseModel):
     body: str
 
 
-async def draft_first_email(tenant_id: str, lead_id: str, kind: str = "first") -> dict | None:
+async def draft_first_email(tenant_id: str, lead_id: str, kind: str = "first", replace: bool = False) -> dict | None:
+    """One pending draft per lead: automatic runs (after scoring, follow-ups) reuse it; the owner's "Draft email"
+    (replace=True) swaps it for a fresh one."""
+    async with tenant_session(tenant_id) as db:
+        pending = await db.one("SELECT * FROM outreach_emails WHERE lead_id=:l AND status='draft' ORDER BY created_at DESC LIMIT 1", l=lead_id)
+    if pending and not replace:
+        return pending
     if not await fetch_lead(tenant_id, lead_id):
         return None
     async with tenant_session(tenant_id) as db:
@@ -445,6 +451,7 @@ async def draft_first_email(tenant_id: str, lead_id: str, kind: str = "first") -
     body = (f"{d.body.strip()}\n\nReply Now — chat with us instantly (no forms): {reply_url(tenant_id, lead_id)}\n\n"
             f"{sender}\n{srow['website_url'] or ''}".strip() + "\n\nNot interested? Reply STOP and we won't email you again.")
     async with tenant_session(tenant_id) as db:
+        await db.exec("UPDATE outreach_emails SET status='replaced' WHERE lead_id=:l AND status='draft'", l=lead_id)
         row = await db.one("INSERT INTO outreach_emails (tenant_id, lead_id, kind, subject, body) VALUES (:t,:l,:k,:s,:b) RETURNING *",
                            t=tenant_id, l=lead_id, k=kind, s=d.subject, b=body)
         await add_event(db, lead_id, "email_drafted", f"{'First' if kind == 'first' else 'Follow-up'} email drafted — waiting for your approval")
