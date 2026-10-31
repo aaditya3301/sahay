@@ -131,7 +131,6 @@
       <button class="send" id="send" aria-label="Send"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </div>
   </div>
-  <p class="voice-hint" id="voice-hint" role="status" hidden></p>
   <div class="pw">AI assistant · powered by Sahay</div>
 </div>
 <script>
@@ -358,48 +357,6 @@
       setTimeout(poll, 600);
     });
   }
-  // ---- "Talk to us": a voice call in the browser (same agent, tools and rules; no phone line needed) ----
-  var V = { id: null, rec: null, live: false, lang: 'hi-IN' };
-  function vstate(t, live) { $('vst').textContent = t; $('orb').classList.toggle('live', !!live); }
-  function vline(cls, t) { var d = el('div', cls, esc(t)); $('vlines').appendChild(d); $('vlines').scrollTop = 1e9; }
-  function speak(text, then) {
-    var u = new SpeechSynthesisUtterance(text);
-    u.lang = V.lang; var vs = speechSynthesis.getVoices().filter(function (v) { return v.lang === V.lang; }); if (vs.length) u.voice = vs[0];
-    u.onend = function () { if (V.live && then) then(); };
-    vstate('Speaking…', true); speechSynthesis.cancel(); speechSynthesis.speak(u);
-  }
-  function listen() {
-    if (!V.live) return;
-    var R = window.SpeechRecognition || window.webkitSpeechRecognition;
-    V.rec = new R(); V.rec.lang = V.lang === 'hi-IN' ? 'en-IN' : V.lang; V.rec.interimResults = false; V.rec.maxAlternatives = 1;
-    var heard = false;
-    V.rec.onresult = function (e) { heard = true; var t = e.results[0][0].transcript; vline('u', t); turn(t); };
-    V.rec.onend = function () { if (V.live && !heard) listen(); };
-    V.rec.onerror = function (e) { if (e.error === 'not-allowed') { vstate('Microphone blocked. Allow it and try again.'); V.live = false; } };
-    vstate('Listening…', true); V.rec.start();
-  }
-  function turn(text) {
-    vstate('Thinking…', false);
-    var slow = setTimeout(function () { speak(V.lang === 'hi-IN' ? 'Ek second, check kar rahi hoon.' : 'One second, let me check.'); }, 1400);
-    api('/v1/widget/voice/turn', { session: S.session, call_id: V.id, text: text }).then(function (r) {
-      clearTimeout(slow); vline('a', r.say);
-      speak(r.say, r.end_call ? endCall : listen);
-    }).catch(function (e) { clearTimeout(slow); vstate(e.message); });
-  }
-  function endCall() {
-    V.live = false; try { V.rec && V.rec.abort(); } catch (e) {} speechSynthesis.cancel();
-    if (V.id) api('/v1/widget/voice/end', { session: S.session, call_id: V.id }).catch(function () {});
-    V.id = null; $('vc').classList.remove('on'); $('mic').focus(); S.lastSig = ''; poll();
-  }
-  $('mic').onclick = function () {
-    if ($('mic').disabled || V.live) return;
-    $('vlines').innerHTML = ''; $('vc').classList.add('on'); $('vend').focus(); vstate('Connecting…'); V.live = true;
-    api('/v1/widget/voice/start', { session: S.session }).then(function (r) {
-      V.id = r.call_id; V.lang = r.lang || 'hi-IN'; vline('a', r.greeting); speak(r.greeting, listen);
-    }).catch(function (e) { vstate(e.message); V.live = false; });
-  };
-  $('vend').onclick = endCall;
-
   $('attach').onclick = function () { file.click(); };
 
   $('send').onclick = function () { var t = input.value; input.value = ''; send(t); };
