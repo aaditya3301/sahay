@@ -1,78 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Eye, Mic, MicOff, Phone, PhoneOff, Plus, RefreshCw, Send, Trash2, X } from 'lucide-react'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { Badge, Button, Card, cx, Field, inputCls, PageHeader, Spinner, Tabs } from '../components/ui'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Card, Field, inputCls } from '../components/ui'
 import { api } from '../lib/api'
-import { humanize } from '../lib/format'
 
-const copy = (t: string) => navigator.clipboard.writeText(t)
-
-function Code({ children }: { children: string }) {
-  return (
-    <div className="setup-code relative">
-      <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-10 text-[11px] leading-relaxed text-slate-100 scroll-thin">{children}</pre>
-      <button title="Copy" onClick={() => copy(children)} className="absolute right-2 top-2 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"><Copy className="h-3.5 w-3.5" /></button>
-    </div>
-  )
-}
-
-function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
-  return (
-    <label className="flex items-start gap-2 text-sm">
-      <input type="checkbox" className="mt-0.5" checked={!!checked} onChange={(e) => onChange(e.target.checked)} />
-      <span>{label}{hint && <span className="block text-[11px] text-slate-400">{hint}</span>}</span>
-    </label>
-  )
-}
-
-export default function Studio() {
+// One shared copy of the agent profile: the setup wizard and Workspace → Integrations edit it through these panels.
+export function useStudioProfile() {
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['studio'], queryFn: () => api('/v1/studio') })
-  const [params, setParams] = useSearchParams()
-  const selectedTab = params.get('tab') || 'persona'
-  const tab = ['persona', 'skills', 'widget', 'voice', 'playground'].includes(selectedTab) ? selectedTab : 'persona'
-  const setTab = (value: string) => setParams((previous) => { const next = new URLSearchParams(previous); next.set('tab', value); return next }, { replace: true })
   const [p, setP] = useState<any>(null)
-  useEffect(() => { if (data) setP(data.profile) }, [data])
+  const [dirty, setDirty] = useState(false)
+  useEffect(() => { if (data) { setP(data.profile); setDirty(false) } }, [data])
   const save = useMutation({
     mutationFn: (body: any) => api('/v1/studio', { method: 'PUT', body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['studio'] }),
   })
-  if (isLoading || !p) return <Spinner />
-  const setIn = (k: string, field: string, v: any) => setP({ ...p, [k]: { ...p[k], [field]: v } })
-  const saveAll = () => save.mutate({ agent_name: p.agent_name, persona: p.persona, skills: p.skills, custom_tools: p.custom_tools, sales: p.sales, voice: p.voice, widget: p.widget })
-  return (
-    <>
-      <div className="studio-sticky-header">
-        <PageHeader title="Agent Studio" subtitle="Your agent’s voice, skills and channels."
-          actions={<>{save.isSuccess && <span className="text-xs text-emerald-700">Saved</span>}{save.isError && <span className="text-xs text-red-600">{(save.error as Error).message}</span>}
-            <Button onClick={saveAll} loading={save.isPending}>Save changes</Button></>} />
-        <Tabs value={tab} onChange={setTab} tabs={[
-          { id: 'persona', label: 'Persona & sales' }, { id: 'skills', label: 'Skills & tools' }, { id: 'widget', label: 'Website widget' },
-          { id: 'voice', label: 'Voice agent' }, { id: 'playground', label: 'Playground' },
-        ]} />
-      </div>
-      <div className="mt-4">
-        {tab === 'persona' && <PersonaTab p={p} setP={setP} setIn={setIn} tenant={data.tenant} />}
-        {tab === 'skills' && <SkillsTab p={p} setP={setP} />}
-        {tab === 'widget' && <WidgetTab p={p} setIn={setIn} data={data} />}
-        {tab === 'voice' && <VoiceTab p={p} setIn={setIn} data={data} />}
-        {tab === 'playground' && (
-          <Card title="Playground" action={<a className="text-xs text-brand-700 underline" href={`/store/${data.site_key}`} target="_blank">Open on the demo storefront ↗</a>}>
-            <p className="mb-3 text-sm text-slate-500">This is the exact widget your customers see, running against your live Agent Profile, knowledge and store data. Save changes first to test them.</p>
-            <iframe title="Widget playground" src={`${data.chat_url}?playground=1`} className="h-[600px] w-full max-w-md rounded-xl border border-slate-200" />
-          </Card>
-        )}
-      </div>
-    </>
-  )
+  const update = (next: any) => { setP(next); setDirty(true) }
+  const setIn = (k: string, field: string, v: any) => update({ ...p, [k]: { ...p[k], [field]: v } })
+  const saveAll = (over: Record<string, any> = {}) => save.mutateAsync({ agent_name: p.agent_name, persona: p.persona, skills: p.skills, custom_tools: p.custom_tools, sales: p.sales, voice: p.voice, widget: p.widget, ...over })
+  return { data, p, setP: update, setIn, saveAll, save, dirty, ready: !isLoading && !!p }
 }
 
-function PersonaTab({ p, setP, setIn, tenant }: { p: any; setP: (v: any) => void; setIn: (k: string, f: string, v: any) => void; tenant: any }) {
-  const s = p.sales
+export function PersonaTab({ p, setP, tenant }: { p: any; setP: (v: any) => void; setIn?: (k: string, f: string, v: any) => void; tenant: any }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="max-w-[780px]">
       <Card title="Persona">
         <div className="space-y-3">
           <Field label="Agent name" hint="Used in chat and calls."><input className={inputCls} value={p.agent_name || ''} onChange={(e) => setP({ ...p, agent_name: e.target.value })} /></Field>
@@ -80,32 +31,7 @@ function PersonaTab({ p, setP, setIn, tenant }: { p: any; setP: (v: any) => void
             <textarea className={inputCls} rows={5} value={p.persona || ''} onChange={(e) => setP({ ...p, persona: e.target.value })} placeholder="e.g. Always suggest the gift box for birthdays. Never compare us with other brands." />
           </Field>
           <Field label="Brand voice (from Settings)"><div className="rounded-lg bg-slate-50 p-2.5 text-sm text-slate-600">{tenant.brand_voice || '—'}</div></Field>
-          <Link to="/settings" className="text-xs font-medium text-brand-700 underline">Edit brand voice in Settings →</Link>
-        </div>
-      </Card>
-      <Card title="Sales settings">
-        <div className="space-y-3">
-          <Field label="Ideal customer" hint="Who you want to reach."><textarea className={inputCls} rows={3} value={s.icp || ''} onChange={(e) => setIn('sales', 'icp', e.target.value)} placeholder="e.g. Corporate HR teams ordering festive gifts, boutique gift shops in metro cities" /></Field>
-          <Field label="What you offer leads"><input className={inputCls} value={s.offer || ''} onChange={(e) => setIn('sales', 'offer', e.target.value)} placeholder="e.g. Bulk gifting from 50 units with custom packaging" /></Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Booking link (optional)"><input className={inputCls} value={s.booking_url || ''} onChange={(e) => setIn('sales', 'booking_url', e.target.value)} placeholder="https://cal.com/…" /></Field>
-            <Field label="Email sender name"><input className={inputCls} value={s.sender_name || ''} onChange={(e) => setIn('sales', 'sender_name', e.target.value)} placeholder={`Team ${tenant.name}`} /></Field>
-          </div>
-          <details className="dashboard-disclosure">
-            <summary>Sales preferences</summary>
-            <div className="space-y-4">
-              <Field label="Follow up after (days)"><input type="number" className={inputCls} value={s.follow_up_days ?? 3} onChange={(e) => setIn('sales', 'follow_up_days', Number(e.target.value))} /></Field>
-              <Toggle checked={s.capture_leads} onChange={(v) => setIn('sales', 'capture_leads', v)} label="Capture leads in chat" hint="Ask interested visitors for contact details." />
-              <Toggle checked={s.save_the_order} onChange={(v) => setIn('sales', 'save_the_order', v)} label="Save-the-order offers" hint="Offer an alternative before cancelling an unshipped order." />
-              <Field label="Names and UPI IDs you receive payments under" hint="Payment screenshots that show another payee are flagged. Your business name is always included. One per line, e.g. your legal name or yourshop@okhdfcbank.">
-                <textarea className={inputCls} rows={3} value={[...(s.payee_names || []), ...(s.upi_ids || [])].join('\n')}
-                  onChange={(e) => { const lines = e.target.value.split('\n').map((l) => l.trim()); setP({ ...p, sales: { ...s, payee_names: lines.filter((l) => l && !l.includes('@')), upi_ids: lines.filter((l) => l.includes('@')) } }) }} />
-              </Field>
-              <Toggle checked={s.cart_reminders !== false} onChange={(v) => setIn('sales', 'cart_reminders', v)} label="Abandoned-cart reminders" hint="Send one WhatsApp reminder after an abandoned checkout." />
-              {s.cart_reminders !== false && <Field label="Remind after (hours)"><input type="number" min={1} className={inputCls} value={s.cart_reminder_hours ?? 1} onChange={(e) => setIn('sales', 'cart_reminder_hours', Number(e.target.value))} /></Field>}
-              <Toggle checked={s.newsletter !== false} onChange={(v) => setIn('sales', 'newsletter', v)} label="Monthly newsletter draft" hint="Draft on the 1st of each month, for your approval." />
-            </div>
-          </details>
+          <Link to="/integrations?tab=business" className="text-xs font-medium text-brand-700 underline">Edit brand voice in Business settings →</Link>
         </div>
       </Card>
     </div>

@@ -110,6 +110,20 @@ export function buildOnboardingPayloads(draft: OnboardingDraft) {
   }
 }
 
+/** The teammate details, chosen in the setup wizard (not at signup), as the two API payloads that store them. */
+export function buildTeammatePayloads(t: { agentName: string; tone: Tone; instructions: string }, workspace: string) {
+  const name = t.agentName.trim() || 'Sahay'
+  return {
+    settings: { brand_voice: toneInstructions[t.tone], widget_greeting: `Hi, I’m ${name} from ${workspace}. How can I help?` },
+    studio: { agent_name: name, persona: [toneInstructions[t.tone], t.instructions.trim()].filter(Boolean).join('\n') },
+  }
+}
+
+/** Work out which tone a saved brand voice came from, so the wizard can show it selected. */
+export function toneFromBrandVoice(brandVoice?: string | null): Tone {
+  return (Object.keys(toneInstructions) as Tone[]).find((k) => brandVoice?.startsWith(toneInstructions[k])) || 'warm'
+}
+
 export function agentGreeting(draft: OnboardingDraft): string {
   const name = draft.agentName.trim() || 'Sahay'
   const business = draft.workspace.trim() || 'your business'
