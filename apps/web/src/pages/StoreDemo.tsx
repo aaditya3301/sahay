@@ -241,8 +241,9 @@ export default function StoreDemo() {
     report(cart)
     try {
       const r = await fetch('/v1/widget/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, items, name: contact.name, phone: contact.phone, email: contact.email || null }) })
+        body: JSON.stringify({ key, items, shopper: session?.token }) })
       const d = await r.json()
+      if (r.status === 401) { if (key) clearSession(key); setSession(null); setCheckout(false); setPaying(false); needLogin(() => setCheckout(true)); return }
       if (!r.ok) throw new Error(d.detail || 'The payment page couldn’t be opened.')
       const Cashfree = await loadCashfree()
       await Cashfree({ mode: d.mode }).checkout({ paymentSessionId: d.payment_session_id, redirectTarget: '_self' })
@@ -341,11 +342,9 @@ export default function StoreDemo() {
           {!items.length ? <div className="store-cart-empty"><ShoppingBag size={32} /><p>Your cart is waiting for a favourite.</p><button className="store-button" onClick={() => setCheckout(false)}>Keep shopping</button></div> : <>
             <div className="store-checkout-items">{items.map((i) => <div key={i.sku}><span>{i.qty} × {products.find((p) => p.sku === i.sku)?.title}</span><span>{money((products.find((p) => p.sku === i.sku)?.price_inr || 0) * i.qty)}</span></div>)}</div>
             <div className="store-checkout-total"><span>Total</span><span>{money(total)}</span></div>
-            <label>Your name<input autoComplete="name" placeholder="Name" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} /></label>
-            <label>Mobile number<input type="tel" autoComplete="tel" inputMode="numeric" placeholder="10-digit mobile number" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} onBlur={() => report(cart)} /></label>
-            <label>Email (optional)<input type="email" autoComplete="email" placeholder="For your receipt" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} /></label>
+            <div className="store-ordering-as"><span>Ordering as</span><strong>{shopper?.name}</strong><span>{shopper?.phone} · {shopper?.email}</span></div>
             {payError && <p className="store-pay-error" role="alert">{payError}</p>}
-            <button className="store-button store-checkout-continue" onClick={pay} disabled={paying || contact.name.trim().length < 3 || contact.phone.replace(/\D/g, '').length < 10}>
+            <button className="store-button store-checkout-continue" onClick={pay} disabled={paying || !shopper}>
               {paying ? 'Opening secure payment…' : <>Pay {money(total)} securely<ArrowRight size={18} /></>}
             </button>
             <p className="store-demo-note">Payments by Cashfree (sandbox). No real money is taken, and returning from the payment page confirms the order.</p>

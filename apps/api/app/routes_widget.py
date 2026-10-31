@@ -450,6 +450,9 @@ class CheckoutBody(BaseModel):
     name: str = ""
     phone: str = ""
     email: str | None = None
+    shopper: str | None = None  # the logged-in shopper's session token
+
+
 # ---------------------------------------------------------------------------
 # Storefront shoppers: sign up / log in on the demo (or a real) store. Each becomes a customer the owner can see.
 # ---------------------------------------------------------------------------
@@ -568,8 +571,17 @@ async def widget_checkout(body: CheckoutBody, request: Request):
 
     limit(request, "checkout", 10)
     tid = await _site_tenant(body.key)
-    try:
-        return jsonable(await payments.create_checkout(tid, body.key, body.items, body.name, body.phone, body.email))
+    d = _read_shopper_token(body.shopper)
+    if not d or d.get("t") != tid:
+        raise HTTPException(401, "Please log in to check out.")
+    async with tenant_session(tid) as db:
+        who = await db.one("SELECT * FROM shoppers WHERE id=:id", id=d["s"])
+    if not who:
+        raise HTTPException(401, "Please log in to check out.")
+    try:  # the order is always placed under the logged-in shopper's own details
+        origin = (request.headers.get("origin") or "").rstrip("/")  # the storefront the shopper is on (localhost in development)
+        back = origin if origin and urlparse(origin).hostname in _own_hosts() else None
+        return jsonable(await payments.create_checkout(tid, body.key, body.items, who["name"], who["phone"], who["email"], back))
     except payments.CheckoutError as e:
         raise HTTPException(400, str(e))
 

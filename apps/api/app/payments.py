@@ -53,7 +53,7 @@ class CheckoutError(ValueError):
     pass
 
 
-async def create_checkout(tenant_id: str, site_key: str, items: list[dict], name: str, phone: str, email: str | None) -> dict:
+async def create_checkout(tenant_id: str, site_key: str, items: list[dict], name: str, phone: str, email: str | None, return_base: str | None = None) -> dict:
     if not configured():
         raise CheckoutError("Payments aren't set up for this store yet.")
     phone_n = norm_phone(phone)
@@ -88,11 +88,12 @@ async def create_checkout(tenant_id: str, site_key: str, items: list[dict], name
             "payment_method, status, shipment_status, tags) VALUES (:t,:r,:n,:p,:e,:li,:tot,'prepaid','payment_pending','not_shipped',:tags)",
             t=tenant_id, r=ref, n=name, p=phone_n, e=email_n, li=lines, tot=total, tags=["storefront", "cashfree"])
     base = settings.public_base_url.rstrip("/")
+    back = (return_base or base).rstrip("/")  # where the shopper lands after paying: the site they came from
     body = {
         "order_id": ref, "order_amount": round(total / 100, 2), "order_currency": "INR",
         "customer_details": {"customer_id": "c" + phone_n[1:], "customer_phone": phone_n[3:], "customer_name": name,
                              **({"customer_email": email_n} if email_n else {})},
-        "order_meta": {"return_url": f"{base}/store/{site_key}?order_id={ref}",
+        "order_meta": {"return_url": f"{back}/store/{site_key}?order_id={ref}",
                        **({"notify_url": f"{base}/webhooks/cashfree"} if base.startswith("https://") else {})},
         "order_note": f"{srow['name']} storefront order"[:200],
         "order_tags": {"tenant_id": tenant_id, "store": srow["slug"]},
