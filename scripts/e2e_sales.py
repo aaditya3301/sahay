@@ -156,7 +156,7 @@ async def main() -> None:
         async def t_voice():
             st = (await c.post(f"{BASE}/v1/voice/test/start", headers=H, json={"phone": buyer["customer_phone"]})).json()
             t1 = (await c.post(f"{BASE}/v1/voice/test/{st['call_id']}/turn", headers=H, json={"text": "Haan ji, mera order kab tak aayega?"})).json()
-            t2 = (await c.post(f"{BASE}/v1/voice/test/{st['call_id']}/turn", headers=H, json={"text": "Theek hai, tracking link WhatsApp pe bhej do please. Bas itna hi, thank you."})).json()
+            t2 = (await c.post(f"{BASE}/v1/voice/test/{st['call_id']}/turn", headers=H, json={"text": "Theek hai, tracking link Telegram pe bhej do please. Bas itna hi, thank you."})).json()
             end = (await c.post(f"{BASE}/v1/voice/test/{st['call_id']}/end", headers=H)).json()
             tools = [u["tool"] for u in t1.get("tools_used", []) + t2.get("tools_used", [])]
             report("voice: knows caller, uses tools, short spoken replies, summary saved",
@@ -198,7 +198,7 @@ async def main() -> None:
                    f"run={r} events={len(a['events'])} summary={s['text'][:120]!r}")
 
         async def t_campaign():
-            camp = (await c.post(f"{BASE}/v1/campaigns", headers=H, json={"name": "E2E festive", "goal": "Remind recent buyers about the Bestie Charm Gift Box for Diwali", "channel": "whatsapp", "audience": {"segment": "recent_buyers"}})).json()
+            camp = (await c.post(f"{BASE}/v1/campaigns", headers=H, json={"name": "E2E festive", "goal": "Remind recent buyers about the Bestie Charm Gift Box for Diwali", "channel": "telegram", "audience": {"segment": "recent_buyers"}})).json()
             d = (await c.get(f"{BASE}/v1/campaigns/{camp['id']}", headers=H)).json()
             await c.post(f"{BASE}/v1/campaigns/{camp['id']}/approve", headers=H)
             for _ in range(40):
@@ -213,10 +213,10 @@ async def main() -> None:
 
         async def t_support_regression():
             dmg = next((x for x in contacts if x["status"] == "delivered"), contacts[0])
-            await c.post(f"{BASE}/v1/simulator/send", headers=H, data={"channel": "whatsapp", "text": "Hi, mera order aaya par ek charm toota hua hai 😞 kya karein?", "phone": dmg["customer_phone"], "name": dmg["customer_name"]})
+            await c.post(f"{BASE}/v1/simulator/send", headers=H, data={"channel": "telegram", "text": "Hi, mera order aaya par ek charm toota hua hai 😞 kya karein?", "phone": dmg["customer_phone"], "name": dmg["customer_name"]})
             txt, steps = "", None
             for _ in range(45):
-                th = (await c.get(f"{BASE}/v1/simulator/thread", headers=H, params={"channel": "whatsapp", "phone": dmg["customer_phone"]})).json()
+                th = (await c.get(f"{BASE}/v1/simulator/thread", headers=H, params={"channel": "telegram", "phone": dmg["customer_phone"]})).json()
                 outs = [m for m in th["messages"] if m["direction"] == "out"]
                 if outs and not th["typing"]:
                     txt = outs[-1]["text"] or ""
@@ -226,7 +226,7 @@ async def main() -> None:
                         steps = [s for r in t.get("runs", []) for s in r.get("steps", []) if s.get("type") == "skill"]
                     break
                 await asyncio.sleep(2)
-            report("support: WhatsApp damaged-item still handled (skills routing)", bool(txt), f"reply={txt[:140]!r} skills={(steps[0]['output']['skills'] if steps else '?')}")
+            report("support: Telegram damaged-item still handled (skills routing)", bool(txt), f"reply={txt[:140]!r} skills={(steps[0]['output']['skills'] if steps else '?')}")
 
         async def t_bot():
             no_proof = await c.post(f"{BASE}/v1/widget/session", json={"key": key, "visitor_id": f"e2e-{uuid.uuid4().hex}", "parent_origin": own})
@@ -265,8 +265,8 @@ async def main() -> None:
 
         async def t_stop():
             who = contacts[-1]
-            await c.post(f"{BASE}/v1/simulator/send", headers=H, data={"channel": "whatsapp", "text": "STOP", "phone": who["customer_phone"], "name": who["customer_name"]})
-            th = (await c.get(f"{BASE}/v1/simulator/thread", headers=H, params={"channel": "whatsapp", "phone": who["customer_phone"]})).json()
+            await c.post(f"{BASE}/v1/simulator/send", headers=H, data={"channel": "telegram", "text": "STOP", "phone": who["customer_phone"], "name": who["customer_name"]})
+            th = (await c.get(f"{BASE}/v1/simulator/thread", headers=H, params={"channel": "telegram", "phone": who["customer_phone"]})).json()
             last = [m for m in th["messages"] if m["direction"] == "out"][-1:] or [{}]
             report("marketing: STOP opts the customer out instantly", "won't get offers" in (last[0].get("text") or ""), (last[0].get("text") or "")[:90])
 

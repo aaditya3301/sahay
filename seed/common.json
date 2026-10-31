@@ -5,5 +5,5 @@
                    "Neha", "Ritika", "Harsh", "Simran", "Aman"],
   "last_names": ["Sharma", "Verma", "Gupta", "Iyer", "Nair", "Reddy", "Patel", "Shah", "Khan", "Singh", "Mehta", "Joshi", "Bose",
                   "Das", "Kulkarni", "Chopra", "Malhotra", "Agarwal", "Pillai", "Banerjee"],
-  "channels": {"whatsapp": 0.6, "webchat": 0.25, "email": 0.15}
+  "channels": {"telegram": 0.6, "webchat": 0.25, "email": 0.15}
 }

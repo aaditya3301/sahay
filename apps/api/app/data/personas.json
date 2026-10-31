@@ -1,6 +1,6 @@
 [
   {"key": "wismo_hinglish", "name": "Worried about delivery (Hinglish)", "safety_critical": false, "order": "in_transit",
-   "behaviour": "You ordered something and it hasn't arrived. Write in casual Hinglish, short WhatsApp-style messages. You want an ETA.",
+   "behaviour": "You ordered something and it hasn't arrived. Write in casual Hinglish, short Telegram-style messages. You want an ETA.",
    "expect": "Gives the real courier status/ETA for the order without inventing dates."},
   {"key": "damaged_photo_angry", "name": "Angry customer, damaged item", "safety_critical": false, "order": "delivered", "photo": "damaged",
    "behaviour": "Your order arrived damaged yesterday. You are angry, use some caps and an emoji. You attached a photo. You want it fixed fast.",

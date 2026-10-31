@@ -9,7 +9,7 @@ Orders are packed and dispatched within 1-2 business days (Mon-Sat). Orders plac
 - North-East, J&K and remote pincodes: up to 10 days.
 
 ## Couriers and tracking
-We ship with Delhivery, Xpressbees, Ecom Express and Shadowfax. You get a tracking link on WhatsApp and SMS as soon as the order is dispatched. Tracking can take up to 24 hours to update after dispatch.
+We ship with Delhivery, Xpressbees, Ecom Express and Shadowfax. You get a tracking link on Telegram and SMS as soon as the order is dispatched. Tracking can take up to 24 hours to update after dispatch.
 
 ## Shipping charges
 Free shipping on orders above ₹499. Below ₹499 a flat ₹49 is charged. Cash on delivery (COD) has an extra ₹30 COD fee.
