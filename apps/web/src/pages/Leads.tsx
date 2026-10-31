@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Copy, Mail, Phone, Plus, Search, Target, Upload } from 'lucide-react'
+import { ArrowLeft, Copy, ExternalLink, Mail, MapPin, Phone, PhoneOutgoing, Plus, Search, Star, Target, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge, Button, Card, ChannelIcon, cx, Empty, Field, inputCls, Modal, PageHeader, Spinner, Tabs } from '../components/ui'
@@ -11,7 +11,7 @@ export const STAGES = ['new', 'contacted', 'engaged', 'qualified', 'callback', '
 const GROUPS: [string, string][] = [['all', 'All'], ['new', 'New'], ['in_progress', 'In progress'], ['callback', 'Callback later'], ['customer', 'Customers'], ['dropped', 'Dropped'], ['needs_attention', 'Needs attention']]
 
 export const stageTone = (s?: string) => ({ new: 'blue', contacted: 'slate', engaged: 'violet', qualified: 'brand', callback: 'amber', customer: 'green', dropped: 'slate', needs_attention: 'red' } as any)[s || ''] || 'slate'
-const sourceLabel = (s?: string) => ({ webchat: 'Website chat', outbound: 'Lead search', import: 'CSV import', manual: 'Added by team', telegram: 'Telegram', whatsapp: 'Telegram', email: 'Email', voice: 'Phone call' } as any)[s || ''] || humanize(s)
+const sourceLabel = (s?: string) => ({ webchat: 'Website chat', outbound: 'Lead search', maps: 'Google Maps', import: 'CSV import', manual: 'Added by team', telegram: 'Telegram', whatsapp: 'Telegram', email: 'Email', voice: 'Phone call' } as any)[s || ''] || humanize(s)
 const emailTone = (s?: string) => ({ valid: 'green', risky: 'amber', invalid: 'red' } as any)[s || ''] || 'slate'
 
 export function ScorePill({ score }: { score?: number | null }) {
@@ -24,7 +24,7 @@ export default function Leads() {
   const qc = useQueryClient()
   const [group, setGroup] = useState('all')
   const [q, setQ] = useState('')
-  const [modal, setModal] = useState<'' | 'find' | 'add' | 'import'>('')
+  const [modal, setModal] = useState<'' | 'find' | 'maps' | 'add' | 'import'>('')
   const { data, isLoading } = useQuery({ queryKey: ['leads', group, q], queryFn: () => api(`/v1/leads?group=${group}&q=${encodeURIComponent(q)}`), refetchInterval: 4000 })
   const refresh = () => qc.invalidateQueries({ queryKey: ['leads'] })
   const running = (data?.searches || []).filter((s: any) => s.status === 'running')
@@ -36,7 +36,8 @@ export default function Leads() {
         <div className="leads-actions">
           <Button size="sm" variant="secondary" onClick={() => setModal('import')}><Upload className="h-3.5 w-3.5" />Import CSV</Button>
           <Button size="sm" variant="secondary" onClick={() => setModal('add')}><Plus className="h-3.5 w-3.5" />Add lead</Button>
-          <Button size="sm" onClick={() => setModal('find')}><Search className="h-3.5 w-3.5" />Find leads</Button>
+          <Button size="sm" variant="secondary" onClick={() => setModal('find')}><Search className="h-3.5 w-3.5" />Find leads</Button>
+          <Button size="sm" onClick={() => setModal('maps')}><MapPin className="h-3.5 w-3.5" />Scrape Google Maps</Button>
         </div>
       </div>
       {data?.drafts_pending > 0 && (
@@ -47,7 +48,9 @@ export default function Leads() {
       )}
       {running.length > 0 && (
         <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-          <Search className="mr-1 inline h-4 w-4" aria-hidden="true" />Searching the web for “{running[0].query}”… leads appear here as they're found, verified and scored.
+          {running[0].source === 'maps'
+            ? <><MapPin className="mr-1 inline h-4 w-4" aria-hidden="true" />Scraping Google Maps for “{running[0].query}”… the businesses appear here in about a minute.</>
+            : <><Search className="mr-1 inline h-4 w-4" aria-hidden="true" />Searching the web for “{running[0].query}”… leads appear here as they're found, verified and scored.</>}
         </div>
       )}
       <Tabs value={group} onChange={setGroup} tabs={GROUPS.map(([id, label]) => ({ id, label: <>{label} <span className="ml-0.5 text-xs text-slate-400">{data?.groups?.[id] ?? ''}</span></> }))} />
@@ -77,7 +80,8 @@ export default function Leads() {
           </table>
         )}
       </Card>
-      <FindModal open={modal === 'find'} onClose={() => setModal('')} searches={data?.searches || []} onDone={refresh} />
+      <FindModal open={modal === 'find'} onClose={() => setModal('')} searches={(data?.searches || []).filter((s: any) => s.source !== 'maps')} onDone={refresh} />
+      <MapsModal open={modal === 'maps'} onClose={() => setModal('')} onDone={refresh} last={(data?.searches || []).find((s: any) => s.source === 'maps')?.id} />
       <AddModal open={modal === 'add'} onClose={() => setModal('')} onDone={refresh} />
       <ImportModal open={modal === 'import'} onClose={() => setModal('')} onDone={refresh} />
     </>
@@ -109,6 +113,53 @@ function FindModal({ open, onClose, searches, onDone }: { open: boolean; onClose
             <div className="mb-1 text-xs font-medium text-slate-500">Recent searches</div>
             {searches.map((s) => <div key={s.id} className="flex justify-between py-0.5 text-xs"><span className="truncate text-slate-700">{s.query}</span><span className="ml-2 whitespace-nowrap text-slate-400">{s.status === 'done' ? `${s.found} found` : s.status} · {ago(s.created_at)}</span></div>)}
           </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+// Google Maps scrape: one query, always 10 businesses, each saved as a lead with its address, phone, rating and Maps link
+function MapsModal({ open, onClose, onDone, last }: { open: boolean; onClose: () => void; onDone: () => void; last?: string }) {
+  const [query, setQuery] = useState('')
+  const [started, setStarted] = useState<string | null>(null)
+  const sid = started || last || null  // the scrape just started, else the latest one, so its results are always one click away
+  const start = useMutation({ mutationFn: () => api('/v1/leads/scrape-maps', { body: { query } }), onSuccess: (r) => { setStarted(r.search.id); onDone() } })
+  const { data: s } = useQuery({ queryKey: ['lead-search', sid], queryFn: () => api(`/v1/leads/searches/${sid}`), enabled: open && !!sid, refetchInterval: (q) => (q.state.data?.status === 'running' ? 2500 : false) })
+  useEffect(() => { if (s && s.status !== 'running') onDone() }, [s?.status])
+  const running = start.isPending || s?.status === 'running'
+  return (
+    <Modal open={open} onClose={onClose} title="Scrape Google Maps" wide>
+      <div className="space-y-3">
+        <p className="text-sm text-slate-500">Say what kind of business and where. Sahay pulls 10 matching businesses from Google Maps with their address, phone, website and rating, and adds each as a lead.</p>
+        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (query.trim().length >= 4 && !running) start.mutate() }}>
+          <input className={inputCls} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Bluetooth headband companies in Bangalore" aria-label="What to look for on Google Maps" />
+          <Button type="submit" className="shrink-0 whitespace-nowrap" loading={running} disabled={query.trim().length < 4}><MapPin className="h-4 w-4" />{running ? 'Scraping…' : 'Scrape 10'}</Button>
+        </form>
+        {start.isError && <div className="text-xs text-red-600">{(start.error as Error).message}</div>}
+        {running && <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">Scraping Google Maps… this takes about a minute. You can close this; the leads still arrive.</div>}
+        {s?.status === 'failed' && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{s.error}</div>}
+        {s?.status === 'done' && (
+          <>
+            <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">“{s.query}”: found {s.results.length} businesses on Google Maps · {s.found} new {s.found === 1 ? 'lead' : 'leads'} added{s.found < s.results.length ? ' (the rest were already in your leads)' : ''}.</div>
+            <ol className="maps-results">
+              {s.results.map((r: any) => (
+                <li key={r.place_id}>
+                  <div className="maps-result-head">
+                    <Link to={`/leads/${r.lead_id}`} className="font-medium text-brand-700 hover:underline">{r.name}</Link>
+                    {r.rating != null && <span className="maps-rating"><Star size={13} aria-hidden="true" />{r.rating}{r.reviews ? ` (${r.reviews})` : ''}</span>}
+                    {!r.new && <Badge>Already a lead</Badge>}
+                  </div>
+                  {r.address && <div className="text-xs text-slate-500">{r.address}</div>}
+                  <div className="maps-result-links">
+                    {r.phone && <span><Phone size={13} aria-hidden="true" />{r.phone}</span>}
+                    {r.website && <a href={r.website.startsWith('http') ? r.website : `https://${r.website}`} target="_blank" rel="noreferrer">{r.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</a>}
+                    <a href={r.maps_url} target="_blank" rel="noreferrer"><ExternalLink size={13} aria-hidden="true" />Google Maps</a>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </>
         )}
       </div>
     </Modal>
@@ -161,8 +212,11 @@ export function LeadDetail() {
   const patch = useMutation({ mutationFn: (body: any) => api(`/v1/leads/${id}`, { method: 'PATCH', body }), onSuccess: inv })
   const qualify = useMutation({ mutationFn: () => api(`/v1/leads/${id}/qualify`, { method: 'POST' }), onSuccess: inv })
   const draft = useMutation({ mutationFn: (kind: string) => api(`/v1/leads/${id}/draft-email?kind=${kind}`, { method: 'POST' }), onSuccess: inv })
+  const [confirmCall, setConfirmCall] = useState(false)
+  const call = useMutation({ mutationFn: () => api(`/v1/leads/${id}/call`, { method: 'POST' }), onSuccess: inv })
   if (isLoading || !data) return <Spinner />
   const l = data.lead
+  const maps = l.enrichment?.maps_url ? l.enrichment : null
   const sentAny = data.emails.some((e: any) => ['sent', 'simulated'].includes(e.status))
   return (
     <>
@@ -172,8 +226,21 @@ export function LeadDetail() {
           <select className={inputCls + ' w-44'} value={l.stage} onChange={(e) => patch.mutate({ stage: e.target.value })}>{STAGES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}</select>
           <Button variant="secondary" onClick={() => qualify.mutate()} loading={qualify.isPending}>Re-qualify</Button>
           {l.email && <Button variant="secondary" onClick={() => draft.mutate(sentAny ? 'followup' : 'first')} loading={draft.isPending}><Mail className="h-4 w-4" />{sentAny ? 'Draft follow-up' : 'Draft email'}</Button>}
+          {l.phone && <Button onClick={() => { call.reset(); setConfirmCall(true) }}><PhoneOutgoing className="h-4 w-4" />Call</Button>}
         </>} />
       {(qualify.isSuccess || draft.isSuccess) && <div className="mb-3 text-xs text-slate-500">Queued — results appear here in a few seconds.</div>}
+      <Modal open={confirmCall} onClose={() => setConfirmCall(false)} title={`Call ${l.company || l.name || 'this lead'}?`}>
+        <div className="space-y-3 text-sm">
+          {!call.data && !call.isError && <>
+            <p>Your voice agent calls <b>{l.phone}</b> from your business's phone number, introduces {l.company ? 'you to them' : 'your business'} and finds out what they need. The transcript and summary appear in Sales → Calls and on this lead.</p>
+            <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setConfirmCall(false)}>Cancel</Button><Button onClick={() => call.mutate()} loading={call.isPending}><PhoneOutgoing className="h-4 w-4" />Call now</Button></div>
+          </>}
+          {call.data && (call.data.error
+            ? <div className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900">The call is saved in Sales → Calls under “To call” but couldn't be placed: {call.data.error}</div>
+            : <div className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">Calling {l.phone} now. Follow it in <Link to={`/calls?id=${call.data.call_id}`} className="underline">Sales → Calls</Link>.</div>)}
+          {call.isError && <div className="rounded-lg bg-red-50 px-3 py-2 text-red-800">{(call.error as Error).message}</div>}
+        </div>
+      </Modal>
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <div className="space-y-4">
           {data.emails.filter((e: any) => e.status === 'draft').map((e: any) => <EmailDraft key={e.id} e={e} onDone={inv} />)}
@@ -226,6 +293,11 @@ export function LeadDetail() {
               {l.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-slate-400" />{l.email}{l.email_status && <Badge tone={emailTone(l.email_status)}>{l.email_status}</Badge>}</div>}
               {l.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-slate-400" />{l.phone}</div>}
               {l.website && <a href={l.website.startsWith('http') ? l.website : `https://${l.website}`} target="_blank" className="block text-brand-700 underline">{l.website}</a>}
+              {maps && <>
+                {maps.address && <div className="flex items-start gap-2 text-slate-600"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />{maps.address}</div>}
+                {maps.rating != null && <div className="flex items-center gap-2 text-slate-600"><Star className="h-3.5 w-3.5 text-amber-500" />{maps.rating}{maps.reviews ? ` · ${maps.reviews} reviews` : ''}</div>}
+                <a href={maps.maps_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-medium text-brand-700 underline"><ExternalLink className="h-3 w-3" />View on Google Maps</a>
+              </>}
               {l.customer_id && <Link to={`/customers/${l.customer_id}`} className="block text-xs font-medium text-brand-700 underline">Customer profile →</Link>}
             </div>
           </Card>

@@ -29,7 +29,7 @@ export default function Calls() {
   const rest = (data || []).filter((c: any) => c.status !== 'queued')
   return (
     <>
-      <PageHeader title="Calls" subtitle="Your customer calls, in one place." />
+      <PageHeader title="Calls" subtitle="Calls with your sales leads: who was called, what was said and what happens next. Customers' calls are in Queries → Phone calls." />
       {isLoading ? <Spinner /> : (
         <div className="space-y-4">
           {queued.length > 0 && (
@@ -43,13 +43,13 @@ export default function Calls() {
                     <Button size="sm" variant="secondary" loading={dial.isPending && dial.variables === c.id} onClick={() => dial.mutate(c.id)}><PhoneOutgoing className="h-3.5 w-3.5" />Call now</Button>
                   </div>
                 </div>))}</div>
-              <div className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">Due calls are dialled automatically through Sarvam when it's connected (Agent Studio → Voice agent), otherwise handed to your voice pipeline webhook.</div>
+              <div className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">Due calls are dialled from your business's phone number (Workspace → Integrations → Voice agent).</div>
             </Card>
           )}
           <Card pad={false}>
-            {!rest.length ? <Empty icon={<PhoneCall className="h-10 w-10" />} title="No calls yet">Try a test call from Agent Studio → Voice agent, or connect Naaradh with the Voice API.</Empty> : (
+            {!rest.length ? <Empty icon={<PhoneCall className="h-10 w-10" />} title="No sales calls yet">Open a lead and press Call, or let a lead book a callback in chat. Their calls, transcripts and summaries appear here.</Empty> : (
               <table className="w-full text-sm">
-                <thead className="border-b bg-slate-50 text-left text-xs text-slate-500"><tr><th className="px-4 py-2">Caller</th><th>Purpose</th><th>Status</th><th>Outcome</th><th>Summary</th><th>Turns</th><th>When</th></tr></thead>
+                <thead className="border-b bg-slate-50 text-left text-xs text-slate-500"><tr><th className="px-4 py-2">Lead</th><th>Purpose</th><th>Status</th><th>Outcome</th><th>Summary</th><th>Turns</th><th>When</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {rest.map((c: any) => (
                     <tr key={c.id} className="cursor-pointer hover:bg-slate-50" onClick={() => open(c.id)}>
@@ -87,7 +87,8 @@ function CallDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <Badge>{purposeLabel(c.purpose)}</Badge>{c.outcome && <Badge tone={outcomeTone(c.outcome)}>{humanize(c.outcome)}</Badge>}
             <span className="text-slate-500">{time(c.started_at || c.created_at)}</span>
             {c.ticket_id && <Link to={`/tickets/${c.ticket_id}`} className="text-xs text-brand-700 underline">Ticket {tref(c.ticket_number)}</Link>}
-            {c.customer_id && <Link to={`/customers/${c.customer_id}`} className="text-xs text-brand-700 underline">Customer profile</Link>}
+            {c.lead_id ? <Link to={`/leads/${c.lead_id}`} className="text-xs text-brand-700 underline">Lead{c.company ? ` · ${c.company}` : ''}</Link>
+              : c.customer_id && <Link to={`/customers/${c.customer_id}`} className="text-xs text-brand-700 underline">Customer profile</Link>}
           </div>
           {c.summary && <div className="rounded-lg bg-slate-50 p-3 text-sm"><div className="text-slate-800">{c.summary}</div>{c.next_step && <div className="mt-1 text-xs text-slate-600">Next step: {c.next_step}</div>}</div>}
           <div className="max-h-[50vh] space-y-2 overflow-y-auto rounded-lg border border-slate-100 p-3 scroll-thin">
@@ -102,7 +103,7 @@ function CallDetail({ id, onClose }: { id: string; onClose: () => void }) {
             {!c.transcript?.length && <div className="text-center text-xs text-slate-400">No transcript.</div>}
           </div>
           {c.context && (c.context.orders_on_file || c.context.orders?.length || c.context.open_tickets?.length) ? (
-            <div className="text-xs text-slate-500">Known before hello: {c.context.orders_on_file ?? c.context.orders?.length ?? 0} orders (details after the caller verifies an order ID), {c.context.open_tickets?.length || 0} open tickets{c.context.lead ? `, lead (${c.context.lead.stage})` : ''}.</div>
+            <div className="text-xs text-slate-500">Known before hello: {c.context.orders_on_file ?? c.context.orders?.length ?? 0} orders from this number, {c.context.open_tickets?.length || 0} open tickets{c.context.lead ? `, lead (${c.context.lead.stage})` : ''}.</div>
           ) : null}
         </div>
       )}

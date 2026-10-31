@@ -65,7 +65,8 @@ async def upsert_lead(db, *, source: str, name: str | None = None, email: str | 
         "VALUES (:t,:cu,:s,:n,:co,:e,:p,:w,:ci,:src,:st,:i,:no,:en) RETURNING *",
         t=db.tenant_id, cu=customer_id, s=search_id, n=name, co=company, e=email, p=phone, w=website, ci=city, src=source,
         st=stage or "new", i=interest, no=notes, en=enrichment or {})
-    await add_event(db, row["id"], "created", f"Lead created from {source}", {"interest": interest})
+    where = {"maps": "Google Maps", "outbound": "a web search", "import": "a CSV import", "manual": "the team", "webchat": "website chat"}.get(source, source)
+    await add_event(db, row["id"], "created", f"Lead created from {where}", {"interest": interest})
     from app.hooks_out import emit
 
     await emit(db, "lead.created", {"id": str(row["id"]), "name": name, "company": company, "email": email, "phone": phone,
@@ -333,6 +334,88 @@ async def find_leads(tenant_id: str, search_id: str) -> None:
                 added += 1
                 new_ids.append(str(lead["id"]))
         await db.exec("UPDATE lead_searches SET status='done', found=:n WHERE id=:id", n=added, id=search_id)
+    for lid in new_ids:
+        enqueue(qualify_lead, tenant_id, lid, name="qualify", queue="sales")
+
+
+# ---------------------------------------------------------------------------
+# Google Maps scrape: Gemini grounded on Google Maps lists real businesses (name, address, phone, website, rating);
+# only places Google Maps itself returned are kept, each linked to its Maps page.
+# ---------------------------------------------------------------------------
+MAPS_COUNT = 10  # every scrape fetches this many businesses
+
+
+class MapsPlace(BaseModel):
+    name: str
+    address: str | None = None
+    city: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    rating: float | None = None
+    reviews: int | None = None
+    about: str = ""
+
+
+class MapsPlaces(BaseModel):
+    places: list[MapsPlace] = []
+
+
+def _place_key(name: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (name or "").removesuffix(" - Google Maps").lower())
+
+
+async def scrape_maps(tenant_id: str, search_id: str) -> None:
+    async with tenant_session(tenant_id) as db:
+        s = await db.one("SELECT * FROM lead_searches WHERE id=:id", id=search_id)
+
+    async def fail(why: str) -> None:
+        async with tenant_session(tenant_id) as db:
+            await db.exec("UPDATE lead_searches SET status='failed', error=:e WHERE id=:id", e=why[:300], id=search_id)
+
+    try:
+        resp = await llm.generate(
+            model=settings.model_resolver, temperature=0.2, purpose="maps_scrape", tenant_id=tenant_id,
+            tools=[types.Tool(google_maps=types.GoogleMaps())],
+            contents=(f"Find {MAPS_COUNT} businesses on Google Maps for: {s['query']}.\nFor each one give its name exactly as on Google "
+                      "Maps, full address, city, phone number, website, rating, number of reviews, and one line on what they do."))
+    except Exception as e:
+        log.warning("maps scrape failed: %s", e)
+        return await fail("Google Maps search didn't work just now. Try again in a minute.")
+    meta = resp.candidates[0].grounding_metadata if resp.candidates else None
+    on_maps: dict[str, dict] = {}  # the places Google Maps returned: the proof each lead is real
+    for chunk in (meta.grounding_chunks or []) if meta else []:
+        m = chunk.maps
+        if m and m.title and not m.title.startswith("Review of"):
+            title = m.title.removesuffix(" - Google Maps")
+            on_maps.setdefault(_place_key(title), {"title": title, "maps_url": m.uri, "place_id": m.place_id})
+    if not on_maps:
+        return await fail("Google Maps found no businesses for this search. Try naming the kind of business and the city.")
+    try:
+        out = await llm.structured(MapsPlaces, model=settings.model_resolver, purpose="maps_extract", tenant_id=tenant_id,
+                                   system="Extract every business as JSON. Copy names, addresses, phone numbers and websites exactly; "
+                                          "leave a field null when it isn't in the text.",
+                                   contents=resp.text or "")
+    except Exception as e:
+        log.warning("maps extract failed: %s", e)
+        return await fail("Couldn't read the Google Maps results. Try again.")
+    results, new_ids = [], []
+    async with tenant_session(tenant_id) as db:
+        for p in out.places:
+            key = _place_key(p.name)
+            g = on_maps.get(key) or next((v for k, v in on_maps.items() if key and (k in key or key in k)), None)
+            if not g or any(r["place_id"] == g["place_id"] for r in results):
+                continue  # not a place Google Maps returned, or already listed
+            lead, created = await upsert_lead(
+                db, source="maps", company=g["title"], phone=p.phone, website=p.website, city=p.city, interest=p.about or None,
+                search_id=search_id, enrichment={"maps_url": g["maps_url"], "place_id": g["place_id"], "address": p.address,
+                                                 "rating": p.rating, "reviews": p.reviews, "query": s["query"]})
+            results.append({"lead_id": str(lead["id"]), "new": created, "name": g["title"], "address": p.address, "phone": norm_phone(p.phone),
+                            "website": p.website, "rating": p.rating, "reviews": p.reviews, "maps_url": g["maps_url"], "place_id": g["place_id"]})
+            if created:
+                new_ids.append(str(lead["id"]))
+            if len(results) >= MAPS_COUNT:
+                break
+        await db.exec("UPDATE lead_searches SET status='done', found=:n, results=:r WHERE id=:id", n=len(new_ids), r=results, id=search_id)
     for lid in new_ids:
         enqueue(qualify_lead, tenant_id, lid, name="qualify", queue="sales")
 

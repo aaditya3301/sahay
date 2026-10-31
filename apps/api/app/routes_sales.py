@@ -221,6 +221,23 @@ async def lead_search(body: LeadSearch, ctx: Ctx = CtxDep):
     return jsonable({"accepted": True, "search": s})
 
 
+class MapsScrape(BaseModel):
+    query: str
+
+
+@router.post("/leads/scrape-maps")
+async def lead_scrape_maps(body: MapsScrape, ctx: Ctx = CtxDep):
+    """Scrape Google Maps for businesses matching the query (always sales.MAPS_COUNT of them); each becomes a lead."""
+    if len(body.query.strip()) < 4:
+        raise HTTPException(400, "Say what kind of business and where, for example: Bluetooth headband companies in Bangalore")
+    async with tenant_session(ctx.tenant_id) as db:
+        s = await db.one("INSERT INTO lead_searches (tenant_id, query, target_count, source) VALUES (:t,:q,:n,'maps') RETURNING *",
+                         t=ctx.tenant_id, q=body.query.strip(), n=sales.MAPS_COUNT)
+        await audit(db, "human", ctx.user_name, "leads.maps_scrape", "lead_search", s["id"], {"query": body.query})
+    enqueue(sales.scrape_maps, ctx.tenant_id, str(s["id"]), name="maps-scrape", queue="sales")
+    return jsonable({"accepted": True, "search": s})
+
+
 @router.get("/leads/searches/{sid}")
 async def lead_search_status(sid: str, ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
@@ -258,6 +275,31 @@ async def lead_draft(lid: str, ctx: Ctx = CtxDep, kind: str = "first"):
             raise HTTPException(400, "This lead has no email address")
     enqueue(sales.draft_first_email, ctx.tenant_id, lid, kind, True, name="draft-email", queue="sales")
     return {"queued": True}
+
+
+@router.post("/leads/{lid}/call")
+async def lead_call(lid: str, ctx: Ctx = CtxDep):
+    """Call the lead now from the business's own phone number (its voice agent). The call, transcript and summary show in
+    Sales → Calls and on the lead."""
+    async with tenant_session(ctx.tenant_id) as db:
+        l = await db.one("SELECT * FROM leads WHERE id=:id", id=lid)
+        if not l:
+            raise HTTPException(404)
+        if not l["phone"]:
+            raise HTTPException(400, "This lead has no phone number")
+        if await db.val("SELECT 1 FROM voice_calls WHERE lead_id=:l AND status IN ('ringing','in_progress') LIMIT 1", l=lid):
+            raise HTTPException(409, "A call to this lead is already in progress")
+        call_id = await db.val(
+            "INSERT INTO voice_calls (tenant_id, direction, purpose, to_number, customer_id, lead_id, status, context, scheduled_for) "
+            "VALUES (:t,'outbound','sales_call',:p,:c,:l,'queued',:x, now()) RETURNING id",
+            t=ctx.tenant_id, p=l["phone"], c=l["customer_id"], l=lid,
+            x={"topic": f"{l['company'] or l['name'] or 'a business'}: {l['interest'] or 'introduce what we sell'}"})
+        await sales.add_event(db, lid, "call", f"{ctx.user_name} called {l['phone']}")
+        await audit(db, "human", ctx.user_name, "lead.call", "lead", lid, {"call_id": str(call_id)})
+    try:
+        return jsonable({"call_id": str(call_id), **(await dial(str(call_id), ctx))})
+    except HTTPException as e:  # not connected yet: the call stays queued on Sales → Calls ("To call")
+        return jsonable({"call_id": str(call_id), "queued": True, "error": e.detail})
 
 
 @router.get("/outreach")
@@ -298,21 +340,24 @@ async def outreach_reject(eid: str, ctx: Ctx = CtxDep):
 async def campaigns(ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
         rows = await db.all("SELECT * FROM campaigns ORDER BY created_at DESC LIMIT 100")
-    return jsonable({"campaigns": rows, "segments": [{"id": k, "label": v[0]} for k, v in lifecycle.SEGMENTS.items()] + [{"id": "leads", "label": "Open sales leads"}]})
+        # the two groups: customers (converted, reached by campaigns) and sales leads (not converted, never in a campaign)
+        reach = await db.one(
+            "SELECT (SELECT count(DISTINCT lower(customer_email)) FROM commerce_orders WHERE status NOT IN ('cancelled','payment_pending') "
+            "AND customer_email IS NOT NULL) AS customers, (SELECT count(*) FROM leads WHERE stage <> 'customer') AS leads")
+    return jsonable({"campaigns": rows, "reach": reach})
 
 
 class CampaignNew(BaseModel):
     name: str
     goal: str
-    channel: str = "telegram"
-    audience: dict = {"segment": "recent_buyers"}
 
 
 @router.post("/campaigns")
 async def campaign_new(body: CampaignNew, ctx: Ctx = CtxDep):
+    """A bulk email to every customer who has ordered (an occasion, a launch…). Sales leads are never included."""
     async with tenant_session(ctx.tenant_id) as db:
-        c = await db.one("INSERT INTO campaigns (tenant_id, name, goal, channel, audience) VALUES (:t,:n,:g,:ch,:a) RETURNING *",
-                         t=ctx.tenant_id, n=body.name, g=body.goal, ch=body.channel if body.channel in ("telegram", "email") else "telegram", a=body.audience)
+        c = await db.one("INSERT INTO campaigns (tenant_id, name, goal, channel, audience) VALUES (:t,:n,:g,'email',:a) RETURNING *",
+                         t=ctx.tenant_id, n=body.name, g=body.goal, a={"segment": "all"})
     await lifecycle.draft_campaign(ctx.tenant_id, str(c["id"]))
     async with tenant_session(ctx.tenant_id) as db:
         return jsonable(await db.one("SELECT * FROM campaigns WHERE id=:id", id=c["id"]))
@@ -324,7 +369,7 @@ async def campaign(cid: str, ctx: Ctx = CtxDep):
         c = await db.one("SELECT * FROM campaigns WHERE id=:id", id=cid)
         if not c:
             raise HTTPException(404)
-        aud = await lifecycle.audience(db, c["audience"] or {}, limit=500) if c["status"] in ("draft", "approved") else None
+        aud = await lifecycle.audience(db, {**(c["audience"] or {}), "channel": c["channel"]}, limit=500) if c["status"] in ("draft", "approved") else None
         sends = await db.all("SELECT s.status, s.skip_reason, s.created_at, cu.display_name FROM campaign_sends s LEFT JOIN customers cu ON cu.id=s.customer_id "
                              "WHERE s.campaign_id=:id ORDER BY s.created_at LIMIT 300", id=cid)
     preview = None
@@ -415,17 +460,22 @@ async def automations_summary(ctx: Ctx = CtxDep):
 # ---------------------------------------------------------------------------
 @router.get("/calls")
 async def calls(ctx: Ctx = CtxDep):
+    """Calls with sales leads only (placed from Leads, callbacks they asked for, or a lead calling in). Customers' own
+    calls are support: they live in Queries → Phone calls."""
     async with tenant_session(ctx.tenant_id) as db:
         return jsonable(await db.all(
             "SELECT v.id, v.direction, v.purpose, v.from_number, v.to_number, v.status, v.summary, v.outcome, v.next_step, v.scheduled_for, "
-            "v.started_at, v.ended_at, v.created_at, c.display_name, t.number AS ticket_number, jsonb_array_length(v.transcript) AS turns "
-            "FROM voice_calls v LEFT JOIN customers c ON c.id=v.customer_id LEFT JOIN tickets t ON t.id=v.ticket_id ORDER BY v.created_at DESC LIMIT 200"))
+            "v.started_at, v.ended_at, v.created_at, coalesce(l.name, l.company, c.display_name) AS display_name, l.company, v.lead_id, "
+            "jsonb_array_length(v.transcript) AS turns "
+            "FROM voice_calls v JOIN leads l ON l.id=v.lead_id LEFT JOIN customers c ON c.id=v.customer_id "
+            "WHERE coalesce(v.context->>'test', '') NOT IN ('true', '1') ORDER BY v.created_at DESC LIMIT 200"))
 
 
 @router.get("/calls/{call_id}")
 async def call_detail(call_id: str, ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
-        c = await db.one("SELECT v.*, cu.display_name, t.number AS ticket_number FROM voice_calls v LEFT JOIN customers cu ON cu.id=v.customer_id "
+        c = await db.one("SELECT v.*, coalesce(l.name, l.company, cu.display_name) AS display_name, l.company, t.number AS ticket_number "
+                         "FROM voice_calls v LEFT JOIN customers cu ON cu.id=v.customer_id LEFT JOIN leads l ON l.id=v.lead_id "
                          "LEFT JOIN tickets t ON t.id=v.ticket_id WHERE v.id=:id", id=call_id)
     if not c:
         raise HTTPException(404)
