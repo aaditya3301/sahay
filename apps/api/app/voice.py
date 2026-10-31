@@ -29,7 +29,8 @@ log = logging.getLogger("sahay.voice")
 VOICE_RULES = """Phone call rules:
 - You are speaking, not writing. One or two short sentences per turn. No lists, no markdown, no emojis.
 - Speak {language}. Match the caller if they switch language.
-- Before a tool call you may say a short filler like "ek second, check kar rahi hoon".
+- {speaks_as}
+- Before a tool call you may say a short filler like "ek second, dekhte hain".
 - Repeat numbers back digit by digit to confirm (order numbers, phone numbers, amounts).
 - Orders: the caller's own orders (recent_orders, list_customer_orders) were placed with the number they're calling from, so you can
   talk about and help with them directly. For any other order, ask for the order ID and call verify_order (with the mobile number they
@@ -44,6 +45,20 @@ Reply with ONLY JSON: {"say": "...", "end_call": false}"""
 STREAM_REPLY = """- Reply with only the words to speak.{script}
 - When the caller is done, say a warm goodbye, then call end_call."""
 DEVANAGARI = " Write Hindi words in Devanagari and keep English words (order, delivery, refund, numbers) in English, so the voice reads both naturally."
+# Hindi verbs carry the speaker's gender ("bol rahi hoon" / "bol raha hoon"), so the words must match the voice callers hear
+SPEAKS_AS = {
+    "woman": 'You speak with a woman\'s voice: in Hindi always use the feminine forms ("main bol rahi hoon", "check karti hoon", '
+             '"kar sakti hoon"), never raha/karta/sakta.',
+    "man": 'You speak with a man\'s voice: in Hindi always use the masculine forms ("main bol raha hoon", "check karta hoon", '
+           '"kar sakta hoon"), never rahi/karti/sakti.',
+}
+
+
+def voice_gender(voice: str | None) -> str:
+    """"woman" or "man": the voice a voice setting picks (a bulbul speaker such as priya or rahul, or a style such as female-hinglish)."""
+    from app.voice_livekit import MALE_SPEAKERS, speaker_for
+
+    return "man" if speaker_for(voice) in MALE_SPEAKERS else "woman"
 
 PURPOSE_GOALS = {
     "cod_confirmation": "This is an outbound call to confirm a cash-on-delivery order before it ships. Confirm the order (confirm_cod) or note the cancellation request.",
@@ -94,7 +109,9 @@ async def _caller_context(db, customer: dict | None, phone: str | None, exclude_
 
 
 async def start_call(tenant_id: str, *, direction: str, from_number: str | None, to_number: str | None,
-                     purpose: str = "inbound", call_id: str | None = None, test: bool = False, stream: bool = False) -> dict:
+                     purpose: str = "inbound", call_id: str | None = None, test: bool = False, stream: bool = False,
+                     voice: str | None = None) -> dict:
+    """voice: the voice callers hear when it isn't the business's own setting (the platform's shared Sarvam agent)."""
     from app.pipeline import InboundMessage, resolve_customer
 
     caller = norm_phone(from_number if direction == "inbound" else to_number)
@@ -129,20 +146,22 @@ async def start_call(tenant_id: str, *, direction: str, from_number: str | None,
                 t=tenant_id, d=direction, p=purpose, f=norm_phone(from_number), to=norm_phone(to_number), c=customer["id"], l=lead, tk=ticket["id"],
                 cv=conv["id"], x={**context, "test": test})
         v = prof["voice"]
+        gender = voice_gender(voice or v.get("voice"))
+        r, s = ("rahi", "sakti") if gender == "woman" else ("raha", "sakta")
         name = (context.get("name") or "").split(" ")[0]
         greeting = v.get("greeting") or (
-            f"Namaste{' ' + name + ' ji' if name else ''}! {srow['tenant_name']} se {prof['agent_name']} baat kar rahi hoon. Bataiye, main aapki kya madad kar sakti hoon?"
+            f"Namaste{' ' + name + ' ji' if name else ''}! {srow['tenant_name']} se {prof['agent_name']} baat kar {r} hoon. Bataiye, main aapki kya madad kar {s} hoon?"
             if direction == "inbound" else
-            f"Namaste{' ' + name + ' ji' if name else ''}, main {srow['tenant_name']} se {prof['agent_name']} bol rahi hoon.")
+            f"Namaste{' ' + name + ' ji' if name else ''}, main {srow['tenant_name']} se {prof['agent_name']} bol {r} hoon.")
         await db.exec("UPDATE voice_calls SET transcript=:tr WHERE id=:id", tr=[{"role": "agent", "text": greeting, "at": time.time()}], id=call["id"])
-    system = build_system(prof, srow, context, purpose, goal_ctx, stream=stream)
+    system = build_system(prof, srow, context, purpose, goal_ctx, stream=stream, gender=gender)
     names = _voice_tools(prof)
     specs = {**TOOL_SPECS, **custom_tool_specs(prof)}
-    return {"call_id": str(call["id"]), "greeting": greeting, "context": context, "system_prompt": system,
+    return {"call_id": str(call["id"]), "greeting": greeting, "context": context, "system_prompt": system, "voice_gender": gender,
             "tools": [{"name": n, "description": specs[n]["description"], "parameters": specs[n]["parameters"]} for n in names if n in specs]}
 
 
-def build_system(prof: dict, srow: dict, context: dict, purpose: str, goal_ctx: dict, stream: bool = False) -> str:
+def build_system(prof: dict, srow: dict, context: dict, purpose: str, goal_ctx: dict, stream: bool = False, gender: str | None = None) -> str:
     lang = {"hinglish": "Hinglish (Hindi + English, natural Indian phone style)", "hi": "simple Hindi", "en": "Indian English"}.get(
         prof["voice"].get("language") or "hinglish", "Hinglish")
     goal = PURPOSE_GOALS.get(purpose, "").format(topic=goal_ctx.get("topic", ""))
@@ -151,7 +170,8 @@ def build_system(prof: dict, srow: dict, context: dict, purpose: str, goal_ctx: 
             f"What we already know about the caller (looked up before the call): {json.dumps(context, default=str)}\n"
             "recent_orders are this caller's own latest orders (placed with the number they're calling from). Use tools for orders, stock, "
             "price and actions. Policy rules are enforced by the tools; never promise what a tool didn't confirm.\n"
-            + VOICE_RULES.format(language=lang, ending=STREAM_REPLY.format(script="" if prof["voice"].get("language") == "en" else DEVANAGARI)
+            + VOICE_RULES.format(language=lang, speaks_as=SPEAKS_AS[gender or voice_gender(prof["voice"].get("voice"))],
+                                 ending=STREAM_REPLY.format(script="" if prof["voice"].get("language") == "en" else DEVANAGARI)
                                  if stream else JSON_REPLY))
 
 

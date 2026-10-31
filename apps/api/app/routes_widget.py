@@ -789,9 +789,9 @@ async def sarvam_start(request: Request, authorization: str | None = Header(None
         tid = await _sarvam_tenant(authorization, k, body)
     except HTTPException as e:
         if e.status_code == 404 and settings.voice_customers_only:  # the shared number, and no business knows this caller
-            return jsonable(voice_sarvam.declined_variables(None))
+            return jsonable(voice_sarvam.declined_variables(None, voice=settings.voice_platform_voice))
         raise
-    return jsonable(await voice_sarvam.on_start(tid, body))
+    return jsonable(await voice_sarvam.on_start(tid, body, platform=voice_sarvam.is_platform_key(k)))
 
 
 @router.post("/v1/voice/sarvam/tools/{name}")

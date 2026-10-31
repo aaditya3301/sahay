@@ -68,6 +68,9 @@ async def studio_save(body: StudioBody, ctx: Ctx = CtxDep):
         if fields:
             await db.exec("UPDATE agent_profiles SET " + ", ".join(f"{k}=:{k}" for k in fields) + ", updated_at=now()", **fields)
             await audit(db, "human", ctx.user_name, "agent_profile.updated", "agent_profile", ctx.tenant_id, {"fields": list(fields)})
+        if fields.get("agent_name") and prof.get("agent_name") and fields["agent_name"] != prof["agent_name"]:
+            # the chat window's greeting names the agent too ("Hi, I'm <name> from ...")
+            await db.exec("UPDATE tenant_settings SET widget_greeting = replace(widget_greeting, :old, :new)", old=prof["agent_name"], new=fields["agent_name"])
     if "voice" in fields:  # dialled numbers route calls to this business
         async with system_session() as sdb:
             await sdb.exec("DELETE FROM channel_routes WHERE channel='voice' AND tenant_id=:t", t=ctx.tenant_id)

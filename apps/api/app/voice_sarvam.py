@@ -35,6 +35,7 @@ What we know about this caller (looked up before the call): {{caller_context}}
 
 Rules:
 - Speak {{language}}. One or two short sentences per turn. Repeat numbers back to confirm.
+- {{speaks_as}}
 - Orders: the orders in "what we know" were placed with the number they're calling from, so help with them directly.
   For any other order, ask for the order ID and call verify_order (pass the mobile number they ordered with if it's a different phone);
   share details or change it only if it matches, and never say whether an order exists before that.
@@ -145,6 +146,8 @@ async def call_for_interaction(tenant_id: str, interaction_id: str | None, phone
 
 def variables(started: dict, prof: dict, business: str) -> dict:
     """Flat agent variables for Sarvam (strings only)."""
+    from app.voice import SPEAKS_AS
+
     ctx = started.get("context") or {}
     tickets = ctx.get("open_tickets") or []
     bits = []
@@ -162,6 +165,7 @@ def variables(started: dict, prof: dict, business: str) -> dict:
     return {
         "call_ref": started["call_id"], "business_name": business, "agent_name": prof.get("agent_name") or "Sahay",
         "persona": prof.get("persona") or "", "language": {"hi": "simple Hindi", "en": "Indian English"}.get(prof["voice"].get("language"), "Hinglish"),
+        "speaks_as": SPEAKS_AS[started.get("voice_gender") or "woman"],
         "greeting": started.get("greeting") or "", "customer_name": (ctx.get("name") or "").split(" ")[0],
         "caller_context": " ".join(bits) or "New caller, nothing on file.", "last_order_ref": orders[0]["order_ref"] if orders else "",
         "last_order_status": orders[0]["status"].replace("_", " ") if orders else "", "open_ticket": str(tickets[0]["number"]) if tickets else "",
@@ -187,11 +191,14 @@ async def is_customer(tenant_id: str, phone: str | None) -> bool:
     return bool(phone) and bool(await routing.find_customer(phone=phone, only=tenant_id))
 
 
-def declined_variables(business: str | None, language: str | None = None) -> dict:
+def declined_variables(business: str | None, language: str | None = None, voice: str | None = None) -> dict:
     """What the agent gets for a caller who isn't a customer: say one line, then end the call."""
+    from app.voice import SPEAKS_AS, voice_gender
+
     en = language == "en"
     return {"call_ref": "", "business_name": business or "Sahay", "agent_name": "Sahay", "persona": "",
-            "language": "Indian English" if en else "Hinglish", "greeting": DECLINE_LINE["en" if en else "hi"], "customer_name": "",
+            "language": "Indian English" if en else "Hinglish", "speaks_as": SPEAKS_AS[voice_gender(voice)],
+            "greeting": DECLINE_LINE["en" if en else "hi"], "customer_name": "",
             "caller_context": "NOT A CUSTOMER: this number is not on any customer account. Say only the greeting, then end the call "
                               "right away. Do not answer questions or share anything about the business or its orders.",
             "last_order_ref": "", "last_order_status": "", "open_ticket": "", "known_customer": "no", "caller_allowed": "no"}
@@ -215,7 +222,8 @@ async def _placing_call_to(tenant_id: str, phone: str | None) -> bool:
                                  "AND created_at > now() - interval '30 minutes' LIMIT 1", p=phone))
 
 
-async def on_start(tenant_id: str, body: dict) -> dict:
+async def on_start(tenant_id: str, body: dict, platform: bool = False) -> dict:
+    """platform: the call came in on the platform's shared agent, which speaks with VOICE_PLATFORM_VOICE, not the business's voice."""
     from app import voice
     from app.profile import load_profile
 
@@ -229,8 +237,9 @@ async def on_start(tenant_id: str, body: dict) -> dict:
         if interaction:  # the tool calls and end-of-call webhook of this call are then ignored
             await remember_call(tenant_id, f"declined:{interaction}")
         log.info("call from %s declined: not a customer of %s", phone or "a hidden number", business)
-        return declined_variables(business, prof["voice"].get("language"))
+        return declined_variables(business, prof["voice"].get("language"), settings.voice_platform_voice if platform else prof["voice"].get("voice"))
     started = await voice.start_call(tenant_id, direction="inbound", from_number=phone, to_number=_pick(body, "agent_phone_number", "to"),
+                                     voice=settings.voice_platform_voice if platform else None,
                                      purpose="inbound", call_id=existing)
     async with tenant_session(tenant_id) as db:
         await db.exec("UPDATE voice_calls SET context = context || :x WHERE id=:id",
@@ -371,7 +380,7 @@ def template(tenant_id: str, tool_specs: list[dict], secret_hint: str) -> dict:
                       "curl": f"curl -X POST '{u['tools'].format(tool=t['name'])}' -H 'Authorization: Bearer {secret_hint}' "
                               f"-H 'Content-Type: application/json' -d '{json.dumps(example)}'"})
     return {"prompt": AGENT_PROMPT_TEMPLATE, "urls": u, "tools": curls,
-            "variables": ["call_ref", "business_name", "agent_name", "persona", "language", "greeting", "customer_name", "caller_context",
+            "variables": ["call_ref", "business_name", "agent_name", "persona", "language", "speaks_as", "greeting", "customer_name", "caller_context",
                           "last_order_ref", "last_order_status", "open_ticket", "known_customer"],
             "response_template": "{{result}}", "max_wait_s": 5, "expires": str(now() + timedelta(days=3650))}
 

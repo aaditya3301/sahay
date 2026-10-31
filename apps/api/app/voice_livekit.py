@@ -27,8 +27,14 @@ from app.db import tenant_session
 log = logging.getLogger("sahay.livekit")
 ROOM_PREFIX = "sahay-"
 # bulbul:v3 voices; a voice setting naming one of these picks it, otherwise "male" → rahul, anything else → priya
-SPEAKERS = ["priya", "simran", "ritu", "pooja", "kavya", "ishita", "shreya", "neha", "roopa", "shruti",
-            "rahul", "shubh", "amit", "ratan", "rohan", "dev", "manan", "sumit", "aditya", "kabir", "varun"]
+FEMALE_SPEAKERS = ["priya", "simran", "ritu", "pooja", "kavya", "ishita", "shreya", "neha", "roopa", "shruti"]
+MALE_SPEAKERS = ["rahul", "shubh", "amit", "ratan", "rohan", "dev", "manan", "sumit", "aditya", "kabir", "varun"]
+SPEAKERS = FEMALE_SPEAKERS + MALE_SPEAKERS
+
+
+def speaker_for(voice: str | None) -> str:
+    name = (voice or "").lower()
+    return next((s for s in SPEAKERS if s in name), None) or ("rahul" if "male" in name.replace("female", "") else "priya")
 
 
 def configured() -> bool:
@@ -55,8 +61,7 @@ def read_call_token(token: str | None) -> tuple[str, str] | None:
 def voice_config(prof: dict, sarvam_cfg: dict) -> dict:
     v = prof["voice"]
     lang = v.get("language") or "hinglish"
-    name = (v.get("voice") or "").lower()
-    speaker = next((s for s in SPEAKERS if s in name), None) or ("rahul" if "male" in name.replace("female", "") else "priya")
+    speaker = speaker_for(v.get("voice"))
     return {
         # codemix: Hindi in Devanagari, English words in Latin, which is how Hinglish callers actually talk
         "stt": {"model": "saaras:v4", "language": "en-IN" if lang == "en" else "hi-IN", "mode": "codemix" if lang == "hinglish" else "transcribe"},

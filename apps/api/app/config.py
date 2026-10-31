@@ -93,6 +93,9 @@ class Settings(BaseSettings):
     # business that knows the caller's number, else the one that owns the dialled number (per-business keys also work)
     voice_platform_key: str = ""
     voice_default_tenant: str = ""  # business slug for callers no business knows yet
+    # The voice set on the platform's Sarvam agent (a bulbul speaker such as priya or rahul, or female / male): the greeting and
+    # the agent's Hindi verb forms ("bol rahi hoon" / "bol raha hoon") follow it
+    voice_platform_voice: str = "female"
     # Only customers get the voice agent: any other caller hears one line and the call ends (voice_sarvam.py, "Customers only")
     voice_customers_only: bool = True
     # LiveKit + Sarvam voice agent (voice_agent.py runs as a LiveKit worker; voice_livekit.py is the API side)
