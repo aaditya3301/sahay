@@ -42,6 +42,7 @@ Rules:
 - The tools enforce the business's rules: if a tool says it needs approval or is denied, say so politely and offer the alternative.
 - Never read links aloud: use send_link_whatsapp (it sends on Telegram) and tell them to check Telegram.
 - If they ask for a person, are very upset, or it's legal/sensitive: use transfer_to_human.
+- If known_customer is "no" and what we know says NOT A CUSTOMER: say only the greeting, then end the call.
 Greeting: {{greeting}}"""
 
 
@@ -168,6 +169,52 @@ def variables(started: dict, prof: dict, business: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Customers only. Sarvam answers every call on its number itself (it has no way to refuse a caller before pick-up), so
+# the start hook screens the caller: a number that isn't on any customer account of the business hears one line and the
+# agent hangs up. No ticket or customer record is made and nothing about the business is shared. Calls the business
+# places itself (sales calls, callbacks) are never screened. VOICE_CUSTOMERS_ONLY=false lets every caller through.
+# ---------------------------------------------------------------------------
+DECLINE_LINE = {
+    "en": "Hello! This number isn't registered with us. Please call from the mobile number on your account. Thank you!",
+    "hi": "Namaste! Yeh number hamare kisi customer account se juda nahi hai. Kripya apne registered mobile number se call karein. Dhanyavaad!",
+}
+
+
+async def is_customer(tenant_id: str, phone: str | None) -> bool:
+    from app import routing
+
+    return bool(phone) and bool(await routing.find_customer(phone=phone, only=tenant_id))
+
+
+def declined_variables(business: str | None, language: str | None = None) -> dict:
+    """What the agent gets for a caller who isn't a customer: say one line, then end the call."""
+    en = language == "en"
+    return {"call_ref": "", "business_name": business or "Sahay", "agent_name": "Sahay", "persona": "",
+            "language": "Indian English" if en else "Hinglish", "greeting": DECLINE_LINE["en" if en else "hi"], "customer_name": "",
+            "caller_context": "NOT A CUSTOMER: this number is not on any customer account. Say only the greeting, then end the call "
+                              "right away. Do not answer questions or share anything about the business or its orders.",
+            "last_order_ref": "", "last_order_status": "", "open_ticket": "", "known_customer": "no", "caller_allowed": "no"}
+
+
+async def was_declined(interaction) -> bool:
+    if not interaction:
+        return False
+    from app.db import system_session
+
+    async with system_session() as db:
+        return bool(await db.val("SELECT 1 FROM voice_call_routes WHERE ref=:r", r=f"declined:{interaction}"))
+
+
+async def _placing_call_to(tenant_id: str, phone: str | None) -> bool:
+    """A call the business is dialling right now (Sarvam may run the start hook for those too): never screened."""
+    if not phone:
+        return False
+    async with tenant_session(tenant_id) as db:
+        return bool(await db.val("SELECT 1 FROM voice_calls WHERE direction='outbound' AND to_number=:p AND status IN ('queued','ringing','in_progress') "
+                                 "AND created_at > now() - interval '30 minutes' LIMIT 1", p=phone))
+
+
 async def on_start(tenant_id: str, body: dict) -> dict:
     from app import voice
     from app.profile import load_profile
@@ -175,6 +222,14 @@ async def on_start(tenant_id: str, body: dict) -> dict:
     phone = norm_phone(_pick(body, "user_phone_number", "user_identifier", "phone", "caller", "from"))
     interaction = _pick(body, "interaction_id", "call_id")
     existing = await call_for_interaction(tenant_id, interaction, phone, create=False)
+    if settings.voice_customers_only and not existing and not await _placing_call_to(tenant_id, phone) and not await is_customer(tenant_id, phone):
+        async with tenant_session(tenant_id) as db:
+            prof = await load_profile(db)
+            business = await db.val("SELECT name FROM tenants WHERE id=:t", t=tenant_id)
+        if interaction:  # the tool calls and end-of-call webhook of this call are then ignored
+            await remember_call(tenant_id, f"declined:{interaction}")
+        log.info("call from %s declined: not a customer of %s", phone or "a hidden number", business)
+        return declined_variables(business, prof["voice"].get("language"))
     started = await voice.start_call(tenant_id, direction="inbound", from_number=phone, to_number=_pick(body, "agent_phone_number", "to"),
                                      purpose="inbound", call_id=existing)
     async with tenant_session(tenant_id) as db:
@@ -226,7 +281,11 @@ async def tool(tenant_id: str, name: str, body: dict) -> dict:
     from app import voice
 
     phone = norm_phone(_pick(body, "user_phone_number", "user_identifier", "phone"))
-    call_id = _pick(body, "call_ref") or await call_for_interaction(tenant_id, _pick(body, "interaction_id"), phone)
+    interaction = _pick(body, "interaction_id")
+    stranger = settings.voice_customers_only and (await was_declined(interaction) or not await is_customer(tenant_id, phone))
+    call_id = _pick(body, "call_ref") or await call_for_interaction(tenant_id, interaction, phone, create=not stranger)
+    if not call_id:  # a caller who isn't a customer: the agent should already be ending the call
+        return {"result": "This caller is not a customer. Say goodbye and end the call now.", "data": {"declined": True}}
     args = {k: v for k, v in body.items() if k not in ("interaction_id", "user_identifier", "user_phone_number", "call_ref", "call_context", "transcript", "call_length")}
     out = await voice.run_tool(tenant_id, call_id, name, args)
     return {"result": speakable(name, out), "data": json.loads(json.dumps(out, default=str))}
@@ -237,7 +296,11 @@ async def on_end(tenant_id: str, body: dict) -> dict:
 
     meta = body.get("metadata") or {}
     phone = norm_phone(_pick(body, "user_phone_number", "user_identifier"))
-    call_id = meta.get("call_id") or await call_for_interaction(tenant_id, _pick(body, "interaction_id", "attempt_id"), phone)
+    interaction = _pick(body, "interaction_id", "attempt_id")
+    stranger = settings.voice_customers_only and (await was_declined(interaction) or not await is_customer(tenant_id, phone))
+    call_id = meta.get("call_id") or await call_for_interaction(tenant_id, interaction, phone, create=not stranger)
+    if not call_id:  # a declined caller: nothing to save (no ticket, no customer record)
+        return {"ok": True, "skipped": "caller is not a customer"}
     turns = body.get("interaction_transcript") or body.get("transcript") or []
     transcript = [{"role": "caller" if t.get("role") in ("user", "caller") else "agent",
                    "text": t.get("indic_text") or t.get("en_text") or t.get("text") or ""} for t in turns if isinstance(t, dict)]

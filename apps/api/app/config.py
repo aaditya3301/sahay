@@ -93,6 +93,8 @@ class Settings(BaseSettings):
     # business that knows the caller's number, else the one that owns the dialled number (per-business keys also work)
     voice_platform_key: str = ""
     voice_default_tenant: str = ""  # business slug for callers no business knows yet
+    # Only customers get the voice agent: any other caller hears one line and the call ends (voice_sarvam.py, "Customers only")
+    voice_customers_only: bool = True
     # LiveKit + Sarvam voice agent (voice_agent.py runs as a LiveKit worker; voice_livekit.py is the API side)
     livekit_url: str = ""  # wss://<project>.livekit.cloud
     livekit_api_key: str = ""
