@@ -1,4 +1,4 @@
-"""One action layer for everyone (AI resolver, human in the inbox, owner on WhatsApp).
+"""One action layer for everyone (AI resolver, human in the inbox, owner on Telegram).
 
 Read tools return data scoped to the conversation's customer. Action tools never execute
 directly: they compute facts server-side, run the policy gate, and only then execute

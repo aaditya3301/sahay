@@ -1,4 +1,4 @@
-"""Sales: leads from every door (widget, Reply Now chat, WhatsApp, voice, outbound search, CSV),
+"""Sales: leads from every door (widget, Reply Now chat, Telegram, voice, outbound search, CSV),
 email checks, scoring, the first email with a signed Reply Now link, and outcome groups.
 
 Outbound pattern borrowed from the sales repo: save the request → answer "accepted" → a worker on the

@@ -98,7 +98,7 @@ async def _upsert_order(db, d: dict, event: str) -> dict:
 
 
 async def _notify(db, order: dict, text: str, kind: str) -> dict:
-    """Tell the customer on WhatsApp (or email). If an open ticket is about this order, the message joins that ticket."""
+    """Tell the customer on Telegram (or email). If an open ticket is about this order, the message joins that ticket."""
     from app.channels import send_to_customer
     from app.lifecycle import _customer_conv
 

@@ -2,11 +2,11 @@
 /internal/cron/daily-summary every evening; the dashboard can also run them on demand.
 
 - Proactive delay alerts: message customers whose parcel is late before they complain.
-- COD confirmations: ask on WhatsApp (and queue a voice call when voice is on) before a COD order ships.
+- COD confirmations: ask on Telegram (and queue a voice call when voice is on) before a COD order ships.
 - Lead follow-ups: draft a follow-up for leads who didn't reply (owner approves), drop after the last one.
 - Due callbacks: hand queued outbound calls to the voice pipeline.
 - Abandoned carts: one gentle reminder a while after checkout was left (widget carts + Shopify abandoned checkouts).
-- Owner's daily WhatsApp summary.
+- Owner's daily summary.
 - Campaigns: draft → owner approves → send, never to someone with an open angry ticket or who opted out.
 - Monthly newsletter: drafted from last month's data on the 1st, sent only after the owner approves.
 """
@@ -110,7 +110,7 @@ async def run_lifecycle(tenant_id: str) -> dict:
                           c=cust["id"], d={"text": text, "status": msg["status"], "days_late": days}, r=o["order_ref"])
             done["delay_alerts"] += 1
 
-    # 2. COD confirmations (WhatsApp now; a voice call is queued when voice is on)
+    # 2. COD confirmations (Telegram now; a voice call is queued when voice is on)
     for o in cod:
         async with tenant_session(tenant_id) as db:
             if not await _claim(db, "cod_confirm", o["order_ref"], summary=f"COD confirmation for #{o['order_ref']} ({inr(o['total_paise'])})"):
@@ -226,7 +226,7 @@ async def daily_summary(tenant_id: str) -> str:
                 status = "failed"
         await db.exec("INSERT INTO lifecycle_events (tenant_id, kind, ref, summary, data) VALUES (:t,'owner_summary',:r,:s,:d) "
                       "ON CONFLICT (tenant_id, kind, ref) DO UPDATE SET summary=:s, data=:d, created_at=now()",
-                      t=tenant_id, r=str(date.today()), s="Owner's daily WhatsApp summary", d={"text": text, "status": status, "stats": s})
+                      t=tenant_id, r=str(date.today()), s="Owner's daily summary", d={"text": text, "status": status, "stats": s})
     return text
 
 

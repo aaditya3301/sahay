@@ -1,4 +1,4 @@
-"""The Agent Profile: one per business, loaded by every channel (widget, Reply Now chat, WhatsApp,
+"""The Agent Profile: one per business, loaded by every channel (widget, Reply Now chat, Telegram,
 email, voice). It holds the persona, which skills are on, custom tools, sales and voice settings.
 
 Skills replace a free-roaming agent: triage picks the intent, the intent picks one or more skills,

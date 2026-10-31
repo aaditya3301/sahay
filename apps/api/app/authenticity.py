@@ -1,4 +1,4 @@
-"""Authenticity screening for every image and PDF a customer sends (Telegram, email, WhatsApp, web chat).
+"""Authenticity screening for every image and PDF a customer sends (Telegram, email, web chat).
 
 Three layers, all recorded on the attachment (attachments.screening) and as fraud signals:
   1. File forensics (deterministic): editing software in image EXIF / PDF metadata, PDF modified after creation,

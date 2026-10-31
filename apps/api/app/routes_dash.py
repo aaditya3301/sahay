@@ -619,7 +619,7 @@ async def store_products(ctx: Ctx = CtxDep):
 
 
 # ---------------------------------------------------------------------------
-# Simulator: be the customer (WhatsApp / email / chat) or the owner's phone
+# Simulator: be the customer (Telegram / email / chat) or the owner's phone
 # ---------------------------------------------------------------------------
 @router.get("/simulator/contacts")
 async def sim_contacts(ctx: Ctx = CtxDep):

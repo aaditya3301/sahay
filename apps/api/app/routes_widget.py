@@ -103,9 +103,9 @@ async def _caps_ok(db, tid: str, visitor: str, widget_cfg: dict) -> str | None:
         "FROM messages m LEFT JOIN customer_identities i ON i.customer_id=m.customer_id AND i.kind='webchat_visitor' "
         "WHERE m.channel='webchat' AND m.direction='in'", v=visitor)
     if row["session_day"] >= int(widget_cfg.get("session_message_cap") or 40):
-        return "You've sent a lot of messages today. Please reach us on WhatsApp or email and the team will help."
+        return "You've sent a lot of messages today. Please reach us on Telegram or email and the team will help."
     if row["tenant_day"] >= int(widget_cfg.get("daily_message_cap") or 400):
-        return "Our chat is very busy right now. Please message us on WhatsApp or email and we'll get back to you."
+        return "Our chat is very busy right now. Please message us on Telegram or email and we'll get back to you."
     return None
 
 
@@ -347,7 +347,7 @@ async def otp_start(body: OtpStart, request: Request):
             except Exception:
                 sent = False
         await audit(db, "system", None, "widget.otp_sent", "visitor", sess["v"], {"phone": phone[-4:], "via": "whatsapp" if sent else "demo"})
-    # Until WhatsApp/SMS is connected the code is returned so the demo works; never do this in production.
+    # Until an SMS/phone channel is connected the code is returned so the demo works; never do this in production.
     return {"ok": True, "sent_via": "whatsapp" if sent else "demo", **({} if sent else {"demo_code": code})}
 
 

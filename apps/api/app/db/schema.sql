@@ -477,7 +477,7 @@ CREATE TABLE IF NOT EXISTS sim_cases (
 );
 
 -- ---------------------------------------------------------------------------
--- Agent Profile: one per business, shared by widget, email chat, WhatsApp and voice
+-- Agent Profile: one per business, shared by widget, email chat, Telegram and voice
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS agent_profiles (
   tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,

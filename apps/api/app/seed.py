@@ -89,7 +89,7 @@ async def gen_variations(tenant: str, scenario: dict, n: int, tenant_id: str) ->
         res = await llm.structured(
             Variations, model=settings.model_persona, temperature=1.0, purpose="seed_history", tenant_id=tenant_id,
             contents=f"Write {k} different realistic customer support messages for {tenant}, an Indian D2C brand. Situation: {scenario['describe']}. "
-                     f"Mix Hinglish (romanized Hindi), English and a few in Hindi Devanagari, WhatsApp style, varied length and tone. "
+                     f"Mix Hinglish (romanized Hindi), English and a few in Hindi Devanagari, chat style, varied length and tone. "
                      f"For each, give a one-line English complaint summary that names the product/courier problem, and the short reply the support agent sent.",
         )
         out.extend(res.items[:k])

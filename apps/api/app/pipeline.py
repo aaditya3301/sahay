@@ -52,7 +52,7 @@ class InboundAttachment:
 
 @dataclass
 class InboundMessage:
-    channel: str  # telegram | whatsapp | email | webchat | voice | sim
+    channel: str  # telegram | email | webchat | voice | sim (whatsapp: dormant)
     text: str = ""
     from_phone: str | None = None
     from_email: str | None = None
@@ -63,7 +63,7 @@ class InboundMessage:
     subject: str | None = None
     attachments: list[InboundAttachment] = field(default_factory=list)
     is_simulation: bool = False
-    verified: bool = False  # phone/email proven (WhatsApp sender, OTP, signed by the business, simulator)
+    verified: bool = False  # phone/email proven (Telegram order check, OTP, signed by the business, simulator)
     context: dict | None = None  # what the web visitor is looking at (page, product, cart)
     identity: tuple[str, str] | None = None  # channel account, e.g. ("telegram", chat_id)
 
