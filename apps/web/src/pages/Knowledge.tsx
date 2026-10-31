@@ -61,17 +61,23 @@ export default function Knowledge() {
           </Card>
         </div>
         <div className="space-y-4">
-          <Card title={<span className="flex items-center gap-1.5"><Search className="h-4 w-4 text-slate-400" />Test retrieval</span>}>
+          <Card title={<span className="flex items-center gap-1.5"><Search className="h-4 w-4 text-slate-400" />Try a question</span>}>
+            <p className="mb-2 text-xs text-slate-500">Type a question a customer might ask to see which parts of your knowledge your agent would use to answer it. If the right article doesn't come up, add or improve it.</p>
             <div className="flex gap-2"><input className={inputCls} placeholder="e.g. jar toot gaya replacement?" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search.mutate()} />
               <Button size="sm" onClick={() => search.mutate()} loading={search.isPending}>Search</Button></div>
             <div className="mt-2 space-y-1.5">{search.data?.map((h: any) => (
-              <div key={h.id} className="rounded-md bg-slate-50 p-2 text-xs"><div className="flex justify-between font-medium"><span>{h.ref} · {h.heading}</span><span className="text-slate-400">sim {h.similarity}</span></div>
+              <div key={h.id} className="rounded-md bg-slate-50 p-2 text-xs"><div className="flex justify-between font-medium"><span className="min-w-0">{h.ref} · {h.heading}</span><span className="shrink-0 whitespace-nowrap text-slate-400" title="How closely this matches the question">{h.similarity ? `${Math.round(h.similarity * 100)}% match` : 'keyword match'}</span></div>
                 <div className="line-clamp-3 text-slate-500">{h.content}</div></div>))}
-              {search.data && !search.data.length && <div className="text-xs text-slate-500">Nothing relevant — this would be logged as a knowledge gap.</div>}</div>
+              {search.data && !search.data.length && <div className="text-xs text-slate-500">Nothing in your knowledge answers this. When a real customer asks something like it, it's saved as a knowledge gap.</div>}</div>
           </Card>
           <Card title={<span className="flex items-center gap-1.5"><Lightbulb className="h-4 w-4 text-amber-500" />Knowledge gaps</span>}
-            action={<Button size="sm" variant="secondary" onClick={() => build.mutate()} loading={build.isPending}>Find gaps</Button>}>
-            <p className="mb-2 text-xs text-slate-500">Questions customers asked that your knowledge couldn't answer. Sahay clusters them and drafts an article for you to approve.</p>
+            action={<Button size="sm" variant="secondary" onClick={() => build.mutate()} loading={build.isPending}>{build.isPending ? 'Checking…' : 'Find gaps'}</Button>}>
+            <p className="mb-2 text-xs text-slate-500">Questions your agent couldn't answer from your knowledge. Sahay groups repeated customer questions and, if there are none yet, checks your knowledge for common questions it's missing. Each gap gets a drafted article for you to approve.</p>
+            {build.error && <div className="mb-2 text-xs text-red-600" role="alert">{(build.error as Error).message}</div>}
+            {build.data && !build.isPending && <div className="mb-2 text-xs text-slate-600" role="status">{
+              build.data.created ? `Found ${build.data.created} ${build.data.created === 1 ? 'gap' : 'gaps'}${build.data.from_scan ? ' in your knowledge' : ' from customer questions'}. Review ${build.data.created === 1 ? 'it' : 'them'} below.`
+                : !build.data.documents ? 'Add some knowledge first (import your website or write an article), then check again.'
+                : 'No gaps found. Your knowledge covers the common questions, and customers haven’t asked anything it couldn’t answer.'}</div>}
             {gaps?.suggestions?.map((s: any) => <GapSuggestion key={s.id} s={s} onDone={refresh} />)}
             {!!gaps?.open_questions?.length && <div className="mt-2 space-y-1">{gaps.open_questions.slice(0, 8).map((g: any) => <div key={g.id} className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">“{g.question}”</div>)}</div>}
             {!gaps?.suggestions?.length && !gaps?.open_questions?.length && <div className="text-xs text-slate-400">No gaps yet.</div>}

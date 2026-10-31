@@ -226,6 +226,47 @@ async def build_gap_suggestions(db, tenant_id: str) -> int:
     return made
 
 
+class MissingTopic(BaseModel):
+    label: str
+    questions: list[str]
+    title: str
+    article_md: str
+    needs_owner_input: bool = True
+
+
+class MissingTopics(BaseModel):
+    topics: list[MissingTopic]
+
+
+async def scan_knowledge_for_gaps(db, tenant_id: str) -> int:
+    """Proactive gap check for businesses with little chat history: read the knowledge base and draft articles for the
+    questions a shopper would commonly ask that it doesn't clearly answer. Facts the knowledge lacks become [OWNER: …] blanks."""
+    docs = await db.all("SELECT title, content_md FROM kb_documents WHERE active ORDER BY created_at DESC LIMIT 25")
+    if not docs:
+        return 0
+    about = await db.val("SELECT business_description FROM tenant_settings") or ""
+    pending = [r["label"] for r in await db.all("SELECT label FROM kb_gap_suggestions WHERE status='suggested'")]
+    digest = "\n\n".join(f"## {d['title']}\n{d['content_md'][:1500]}" for d in docs)[:24000]
+    out = await llm.structured(
+        MissingTopics, model=settings.model_composer, purpose="gap_scan", tenant_id=tenant_id, temperature=0.2,
+        system="You review a store's support knowledge base. Be strict: only list a topic if the knowledge really does not answer it.",
+        contents=(f"Business: {about}\n\nKnowledge base:\n{digest}\n\nAlready suggested (skip these): {json.dumps(pending)}\n\n"
+                  "List up to 4 questions that customers of this kind of online store commonly ask and that the knowledge above does NOT "
+                  "clearly answer (think: delivery time by city, COD, exchange/return window, warranty, product care, bulk orders, order tracking, "
+                  "payment options). Group related questions into one topic. For each topic give 2-3 example customer questions (natural, short; "
+                  "Hinglish is fine) and draft a short FAQ article. Use ONLY facts stated in the knowledge; where a fact is missing write "
+                  "[OWNER: fill in ...] and set needs_owner_input. Return an empty list if the knowledge covers the basics well."),
+    )
+    made = 0
+    for t in out.topics[:4]:
+        if not t.questions or t.label in pending:
+            continue
+        await db.exec("INSERT INTO kb_gap_suggestions (tenant_id, label, questions, draft_title, draft_article_md) VALUES (:t,:l,:q,:ti,:a)",
+                      t=tenant_id, l=t.label, q=t.questions[:5], ti=t.title, a=t.article_md)
+        made += 1
+    return made
+
+
 async def approve_gap(db, suggestion_id: str, title: str, article_md: str) -> str:
     doc_id = await kb.add_document(db, title, article_md, "gap_approved")
     await db.exec("UPDATE kb_gap_suggestions SET status='approved', draft_title=:t, draft_article_md=:a WHERE id=:id",

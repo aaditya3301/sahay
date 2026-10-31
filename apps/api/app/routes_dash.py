@@ -323,7 +323,17 @@ async def kb_gaps(ctx: Ctx = CtxDep):
 @router.post("/kb/gaps/build")
 async def kb_gaps_build(ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
-        return {"created": await insights.build_gap_suggestions(db, ctx.tenant_id)}
+        docs = await db.val("SELECT count(*) FROM kb_documents WHERE active")
+        from_chats = await insights.build_gap_suggestions(db, ctx.tenant_id)
+        from_scan = 0
+        if not from_chats and docs:  # no repeated customer questions yet: check the knowledge itself
+            try:
+                from_scan = await insights.scan_knowledge_for_gaps(db, ctx.tenant_id)
+            except Exception:
+                log.exception("knowledge scan failed")
+                raise HTTPException(502, "Couldn't check your knowledge right now. Please try again in a minute.")
+        open_questions = await db.val("SELECT count(*) FROM kb_gaps WHERE suggestion_id IS NULL")
+    return {"created": from_chats + from_scan, "from_chats": from_chats, "from_scan": from_scan, "documents": docs, "open_questions": open_questions}
 
 
 class GapDecision(BaseModel):
