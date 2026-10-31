@@ -95,6 +95,10 @@ function PersonaTab({ p, setP, setIn, tenant }: { p: any; setP: (v: any) => void
               <Field label="Follow up after (days)"><input type="number" className={inputCls} value={s.follow_up_days ?? 3} onChange={(e) => setIn('sales', 'follow_up_days', Number(e.target.value))} /></Field>
               <Toggle checked={s.capture_leads} onChange={(v) => setIn('sales', 'capture_leads', v)} label="Capture leads in chat" hint="Ask interested visitors for contact details." />
               <Toggle checked={s.save_the_order} onChange={(v) => setIn('sales', 'save_the_order', v)} label="Save-the-order offers" hint="Offer an alternative before cancelling an unshipped order." />
+              <Field label="Names and UPI IDs you receive payments under" hint="Payment screenshots that show another payee are flagged. Your business name is always included. One per line, e.g. your legal name or yourshop@okhdfcbank.">
+                <textarea className={inputCls} rows={3} value={[...(s.payee_names || []), ...(s.upi_ids || [])].join('\n')}
+                  onChange={(e) => { const lines = e.target.value.split('\n').map((l) => l.trim()); setP({ ...p, sales: { ...s, payee_names: lines.filter((l) => l && !l.includes('@')), upi_ids: lines.filter((l) => l.includes('@')) } }) }} />
+              </Field>
               <Toggle checked={s.cart_reminders !== false} onChange={(v) => setIn('sales', 'cart_reminders', v)} label="Abandoned-cart reminders" hint="Send one WhatsApp reminder after an abandoned checkout." />
               {s.cart_reminders !== false && <Field label="Remind after (hours)"><input type="number" min={1} className={inputCls} value={s.cart_reminder_hours ?? 1} onChange={(e) => setIn('sales', 'cart_reminder_hours', Number(e.target.value))} /></Field>}
               <Toggle checked={s.newsletter !== false} onChange={(v) => setIn('sales', 'newsletter', v)} label="Monthly newsletter draft" hint="Draft on the 1st of each month, for your approval." />

@@ -89,7 +89,51 @@ function Attachment({ a }: { a: any }) {
     <a href={mediaUrl(a.id)} target="_blank"><img src={mediaUrl(a.id)} className="mt-1.5 max-h-48 rounded-lg border border-slate-200" /></a>
   )
   if (a.kind === 'audio') return <audio controls src={mediaUrl(a.id)} className="mt-1.5 h-9 w-60" />
-  return <a href={mediaUrl(a.id)} target="_blank" className="mt-1 flex items-center gap-1 text-xs text-brand-700"><FileText className="h-3.5 w-3.5" />Attachment</a>
+  return <a href={mediaUrl(a.id)} target="_blank" className="mt-1 flex items-center gap-1 text-xs text-brand-700"><FileText className="h-3.5 w-3.5" />{a.filename || (a.mime === 'application/pdf' ? 'PDF document' : 'Attachment')}</a>
+}
+
+const VERDICT: Record<string, { tone: string; label: string }> = {
+  genuine: { tone: 'green', label: 'Looks genuine' }, suspicious: { tone: 'amber', label: 'Suspicious' }, likely_fake: { tone: 'red', label: 'Likely fake' },
+}
+
+// Authenticity check of every photo / PDF the customer sent (app/authenticity.py)
+function Authenticity({ data }: { data: any }) {
+  const atts = data.messages.flatMap((m: any) => (m.attachments || []).filter((a: any) => a.screening))
+  if (!atts.length) return null
+  return (
+    <Card title={<span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-slate-400" />Authenticity check</span>}>
+      <div className="space-y-4">
+        {atts.map((a: any) => {
+          const sc = a.screening
+          const v = VERDICT[sc.verdict] || VERDICT.suspicious
+          const x = Object.entries(sc.extracted || {}).filter(([, val]) => val !== null && val !== '' && val !== 'unknown')
+          const bad = (sc.signals || []).filter((s: any) => s.score > 0)
+          const good = (sc.signals || []).filter((s: any) => s.score < 0)
+          return (
+            <div key={a.id} className="space-y-2">
+              <div className="flex gap-2">
+                {a.kind === 'image'
+                  ? <a href={mediaUrl(a.id)} target="_blank"><img src={mediaUrl(a.id)} className="h-24 w-24 rounded-lg border object-cover" /></a>
+                  : <a href={mediaUrl(a.id)} target="_blank" className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-lg border text-[11px] text-slate-600"><FileText className="h-6 w-6" />{a.filename || 'PDF'}</a>}
+                <div className="min-w-0 space-y-1 text-xs">
+                  <div className="flex flex-wrap items-center gap-1"><Badge tone={v.tone}>{v.label}</Badge><Badge>{humanize(sc.kind)}</Badge>
+                    <span className="text-slate-400">score {sc.score}</span></div>
+                  <div className="text-slate-600">{sc.summary}</div>
+                  {sc.ai_generated_likelihood >= 0.5 && <div className="text-red-600">Possibly AI-generated ({Math.round(sc.ai_generated_likelihood * 100)}%)</div>}
+                </div>
+              </div>
+              {x.length > 0 && <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 rounded-md bg-slate-50 p-2 text-[11px]">
+                {x.map(([k, val]) => <div key={k} className="truncate"><span className="text-slate-400">{humanize(k)}:</span> {String(val)}</div>)}
+              </div>}
+              {bad.map((s: any, i: number) => <div key={i} className="rounded bg-red-50 px-2 py-1 text-[11px] text-red-700">⚑ {humanize(s.kind)}{s.evidence?.sign ? `: ${s.evidence.sign}` : s.evidence?.payee ? `: paid to ${s.evidence.payee}` : s.evidence?.software || s.evidence?.producer ? `: ${s.evidence.software || s.evidence.producer}` : ''}</div>)}
+              {good.map((s: any, i: number) => <div key={i} className="rounded bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">✓ {humanize(s.kind)}</div>)}
+              {!bad.length && !good.length && <div className="text-[11px] text-emerald-700">No signs of editing, reuse or mismatches found.</div>}
+            </div>
+          )
+        })}
+      </div>
+    </Card>
+  )
 }
 
 function Conversation({ data, onDone }: { data: any; onDone: () => void }) {
@@ -138,7 +182,8 @@ function AIPanel({ data, onDone }: { data: any; onDone: () => void }) {
           <div className="space-y-2">{data.actions.map((a: any) => <ActionRow key={a.id} a={a} />)}</div>
         </Card>
       )}
-      <Evidence data={data} />
+      <Authenticity data={data} />
+          <Evidence data={data} />
       {data.security_events.length > 0 && (
         <Card title={<span className="flex items-center gap-1.5 text-red-700"><ShieldAlert className="h-4 w-4" />Security</span>}>
           <div className="space-y-1.5 text-xs">{data.security_events.map((e: any) => <div key={e.id} className="rounded-md bg-red-50 p-2 text-red-800">{e.detail}</div>)}</div>
