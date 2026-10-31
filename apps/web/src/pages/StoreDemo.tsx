@@ -8,20 +8,6 @@ type Product = { sku: string; title: string; description?: string; price_inr: nu
 type StoreConfig = { name: string; slug: string; brand_color?: string; agent_name?: string }
 type Placed = { order_id: string; paid: boolean; demo: boolean; total_inr: number; items: { title: string; qty: number }[]; expected_delivery?: string | null; customer_name: string }
 type OrderView = Placed & { status: string; placed_at?: string | null; delivered_at?: string | null; shipment_status?: string | null; phone: string }
-type Saved = { order_id: string; phone: string }
-
-// Orders placed from this browser, so "My orders" can list them (the server still checks order id + mobile number)
-const savedKey = (key: string) => `sahay.orders.${key}`
-const loadSaved = (key: string): Saved[] => { try { return JSON.parse(localStorage.getItem(savedKey(key)) || '[]') } catch { return [] } }
-const saveOrder = (key: string, o: Saved) => {
-  try { localStorage.setItem(savedKey(key), JSON.stringify([o, ...loadSaved(key).filter((x) => x.order_id !== o.order_id)].slice(0, 20))) } catch { /* private mode */ }
-}
-const findOrder = async (key: string, orderId: string, phone: string): Promise<OrderView> => {
-  const r = await fetch('/v1/widget/orders/find', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, order_id: orderId, phone }) })
-  const d = await r.json()
-  if (!r.ok) throw new Error(d.detail || 'No order matches that order ID and mobile number.')
-  return d
-}
 const STATUS: Record<string, string> = { payment_pending: 'Payment pending', processing: 'Confirmed, packing', in_transit: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' }
 const shortDate = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''
 
@@ -77,8 +63,6 @@ export default function StoreDemo() {
   const [copied, setCopied] = useState(false)
   const [ordersOpen, setOrdersOpen] = useState(false)
   const [myOrders, setMyOrders] = useState<OrderView[]>([])
-  const [lookup, setLookup] = useState({ order_id: '', phone: '' })
-  const [lookupError, setLookupError] = useState('')
   const [loadingOrders, setLoadingOrders] = useState(false)
   const ordersDialog = useRef<HTMLDialogElement>(null)
   const [loadError, setLoadError] = useState('')
@@ -96,7 +80,6 @@ export default function StoreDemo() {
       .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.detail || 'We couldn’t find that order.'); return d })
       .then((d: OrderView) => {
         setPlaced(d); setCart({})
-        if (d.paid) saveOrder(key, { order_id: d.order_id, phone: d.phone })
         // tell the chat assistant about the order, once the widget has loaded
         let tries = 0
         const tell = () => { const sahay = (window as any).Sahay; if (sahay) sahay('setContext', { order_id: d.order_id, order_paid: d.paid }); else if (tries++ < 20) setTimeout(tell, 500) }
@@ -137,21 +120,16 @@ export default function StoreDemo() {
     else if (!ordersOpen && dialog?.open) dialog.close()
   }, [ordersOpen])
 
+  // "My orders" lists what this account has bought: no order id or phone number to type
   const openOrders = async () => {
-    setOrdersOpen(true); setLookupError('')
-    const saved = loadSaved(key || '')
-    if (!saved.length) return
+    setOrdersOpen(true)
+    if (!key || !session) return
     setLoadingOrders(true)
-    const found = await Promise.all(saved.map((o) => findOrder(key || '', o.order_id, o.phone).catch(() => null)))
-    setMyOrders(found.filter((o): o is OrderView => !!o)); setLoadingOrders(false)
-  }
-  const lookUp = async () => {
-    setLookupError('')
     try {
-      const o = await findOrder(key || '', lookup.order_id, lookup.phone)
-      saveOrder(key || '', { order_id: o.order_id, phone: o.phone })
-      setMyOrders((list) => [o, ...list.filter((x) => x.order_id !== o.order_id)]); setLookup({ order_id: '', phone: '' })
-    } catch (e: any) { setLookupError(e.message) }
+      const r = await fetch(`/v1/widget/shopper/orders?key=${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${session.token}` } })
+      if (r.status === 401) { clearSession(key); setSession(null); setOrdersOpen(false); return }
+      setMyOrders(r.ok ? await r.json() : [])
+    } catch { setMyOrders([]) } finally { setLoadingOrders(false) }
   }
 
   useEffect(() => {
@@ -272,8 +250,6 @@ export default function StoreDemo() {
         <a className="store-wordmark" href="#store-top">{cfg.name}<span aria-hidden="true">.</span></a>
         <nav aria-label="Store navigation">
           <a href="#store-shop">Shop</a><a href="#store-story">{farm ? 'Our roots' : 'Our story'}</a>
-          <button className="store-nav-help" onClick={openOrders}>My orders</button>
-          <button className="store-nav-help" onClick={openHelp}>Get help</button>
         </nav>
         {shopper ? (
           <details className="store-account">
@@ -387,7 +363,7 @@ export default function StoreDemo() {
         <div className="store-checkout-inner" data-ui>
           <div className="store-checkout-heading"><h2 id="orders-title">My orders</h2><button onClick={() => setOrdersOpen(false)} aria-label="Close"><X size={22} /></button></div>
           {loadingOrders && <p className="store-demo-note">Loading your orders…</p>}
-          {!loadingOrders && !myOrders.length && <div className="store-cart-empty"><Package size={32} /><p>No orders on this device yet. Find one with your order ID and mobile number.</p></div>}
+          {!loadingOrders && !myOrders.length && <div className="store-cart-empty"><Package size={32} /><p>You haven’t placed any orders yet.</p></div>}
           <div className="store-order-list">
             {myOrders.map((o) => (
               <article key={o.order_id} className="store-order-card">
@@ -402,14 +378,7 @@ export default function StoreDemo() {
               </article>
             ))}
           </div>
-          <div className="store-order-find">
-            <h3>Find an order</h3>
-            <label>Order ID<input placeholder="e.g. LL-7KQ3XD" value={lookup.order_id} onChange={(e) => setLookup({ ...lookup, order_id: e.target.value.toUpperCase() })} /></label>
-            <label>Mobile number used at checkout<input type="tel" inputMode="numeric" placeholder="10-digit mobile number" value={lookup.phone} onChange={(e) => setLookup({ ...lookup, phone: e.target.value })} /></label>
-            {lookupError && <p className="store-pay-error" role="alert">{lookupError}</p>}
-            <button className="store-button" onClick={lookUp} disabled={lookup.order_id.trim().length < 4 || lookup.phone.replace(/\D/g, '').length < 10}>Find order</button>
-          </div>
-          <p className="store-demo-note">Calling or chatting with {cfg.agent_name || 'us'}? Keep your order ID handy: we’ll ask for it and check it matches your number before discussing the order.</p>
+          <p className="store-demo-note">These are the orders on your account. Chatting with {cfg.agent_name || 'us'} about one? They already know it is yours.</p>
         </div>
       </dialog>
       {payError && !checkout && <div className="store-toast" role="alert"><span>{payError}</span><button aria-label="Dismiss notification" onClick={() => setPayError('')}><X size={18} /></button></div>}

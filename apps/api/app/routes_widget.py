@@ -559,6 +559,24 @@ async def shopper_me(request: Request, key: str):
     return {"shopper": _shopper_view(row), "chat": chat}
 
 
+@router.get("/v1/widget/shopper/orders")
+async def shopper_orders(request: Request, key: str):
+    """The logged-in shopper's own orders, found through their account: no order id or phone number to type."""
+    from app import payments
+
+    tid = await _site_tenant(key)
+    d = _read_shopper_token((request.headers.get("authorization") or "").removeprefix("Bearer ").strip())
+    if not d or d.get("t") != tid:
+        raise HTTPException(401, "Please log in again.")
+    async with tenant_session(tid) as db:
+        who = await db.one("SELECT * FROM shoppers WHERE id=:id", id=d["s"])
+        if not who:
+            raise HTTPException(401, "Please log in again.")
+        rows = await db.all("SELECT * FROM commerce_orders WHERE customer_phone=:p AND status <> 'payment_pending' "
+                            "ORDER BY placed_at DESC NULLS LAST LIMIT 50", p=who["phone"])
+    return jsonable([payments.summary(o) for o in rows])
+
+
 class ConfirmBody(BaseModel):
     key: str
     order_id: str
