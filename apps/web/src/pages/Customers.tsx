@@ -21,7 +21,7 @@ export default function Customers() {
             <tbody className="divide-y divide-slate-100">
               {data.map((c: any) => (
                 <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2.5"><Link to={`/customers/${c.id}`} className="font-medium text-brand-700 hover:underline">{c.display_name || 'Unknown'}</Link>{c.vip && <Badge tone="violet" className="ml-1">VIP</Badge>}</td>
+                  <td className="px-4 py-2.5"><Link to={`/customers/${c.id}`} className="font-medium text-brand-700 hover:underline">{c.display_name || 'Unknown'}</Link>{c.vip && <Badge tone="violet" className="ml-1">VIP</Badge>}{c.signed_up_at && <Badge tone="blue" className="ml-1">Storefront account</Badge>}</td>
                   <td className="text-xs text-slate-500">{c.primary_phone}<br />{c.primary_email}</td>
                   <td className="tabular-nums">{c.tickets}</td>
                   <td><FrustrationBar value={c.frustration_score} /></td>
@@ -72,6 +72,16 @@ export function CustomerDetail() {
             </div>
             {data.fraud_signals.map((f: any, i: number) => <div key={i} className="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700">⚑ {humanize(f.kind)} · {time(f.created_at)}</div>)}
           </Card>
+          {data.shopper && (
+            <Card title="Storefront account">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">Signed up</span><span>{time(data.shopper.created_at)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Last login</span><span>{data.shopper.last_login_at ? time(data.shopper.last_login_at) : '—'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Orders placed</span><span>{data.orders.length}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Total ordered</span><b>{inr(data.orders.reduce((n: number, o: any) => n + (o.total_inr || 0), 0))}</b></div>
+              </div>
+            </Card>
+          )}
           <Card title="Orders">
             <div className="space-y-2">{data.orders.map((o: any) => (
               <div key={o.order_ref} className="rounded-lg border border-slate-100 p-2 text-xs">

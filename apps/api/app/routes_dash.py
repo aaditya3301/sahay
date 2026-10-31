@@ -207,7 +207,8 @@ async def customers(ctx: Ctx = CtxDep, q: str = ""):
     async with tenant_session(ctx.tenant_id) as db:
         rows = await db.all(
             "SELECT c.*, (SELECT count(*) FROM tickets t WHERE t.customer_id=c.id) AS tickets, "
-            "(SELECT max(created_at) FROM messages m WHERE m.customer_id=c.id) AS last_contact "
+            "(SELECT max(created_at) FROM messages m WHERE m.customer_id=c.id) AS last_contact, "
+            "(SELECT s.created_at FROM shoppers s WHERE s.customer_id=c.id LIMIT 1) AS signed_up_at "
             "FROM customers c WHERE NOT c.is_simulation AND (:q='' OR c.display_name ILIKE '%'||:q||'%' OR c.primary_phone ILIKE '%'||:q||'%' "
             "OR c.primary_email ILIKE '%'||:q||'%') ORDER BY last_contact DESC NULLS LAST LIMIT 200", q=q,
         )
@@ -228,6 +229,7 @@ async def customer(cid: str, ctx: Ctx = CtxDep):
         )
         tickets_ = await db.all("SELECT id, number, status, intent, summary, created_at FROM tickets WHERE customer_id=:c ORDER BY created_at DESC", c=cid)
         fraud = await db.all("SELECT kind, score, created_at FROM fraud_signals WHERE customer_id=:c ORDER BY created_at DESC", c=cid)
+        shopper = await db.one("SELECT created_at, last_login_at FROM shoppers WHERE customer_id=:c", c=cid)
         from app.commerce import get_commerce
 
         shop = await get_commerce(db)
@@ -239,7 +241,7 @@ async def customer(cid: str, ctx: Ctx = CtxDep):
                 orders += await shop.find_orders(email=i["value"], limit=10)
         seen = set()
         orders = [o for o in orders if not (o["order_ref"] in seen or seen.add(o["order_ref"]))]
-    return jsonable({"customer": c, "identities": ids, "timeline": timeline, "tickets": tickets_, "fraud_signals": fraud, "orders": orders})
+    return jsonable({"customer": c, "identities": ids, "timeline": timeline, "tickets": tickets_, "fraud_signals": fraud, "orders": orders, "shopper": shopper})
 
 
 # ---------------------------------------------------------------------------
