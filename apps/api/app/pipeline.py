@@ -431,6 +431,9 @@ async def page_context_text(ctx: ToolContext, context: dict | None) -> str:
     if lead:
         ctx.lead_id = str(lead["id"])
         lines.append(f"This person is a sales lead (stage {lead['stage']}, interest: {lead['interest'] or '-'}, company: {lead['company'] or '-'}).")
+        on_file = ", ".join(f"{k} {v}" for k, v in (("name", lead.get("name")), ("email", lead.get("email")), ("phone", lead.get("phone"))) if v)
+        if on_file:  # Reply Now leads came from our email: don't make them repeat who they are
+            lines.append(f"We already have their contact details ({on_file}). Don't ask for them again; use them for capture_lead or a quote.")
         em = await ctx.db.one("SELECT subject, body FROM outreach_emails WHERE lead_id=:l AND status IN ('sent','simulated') ORDER BY sent_at DESC LIMIT 1", l=lead["id"])
         if em:
             lines.append(f"The last email we sent them, subject '{em['subject']}': {em['body'][:600]}")

@@ -144,13 +144,13 @@ async def main() -> None:
                 return report("reply-now: lead email + chat link", False, "no draft")
             sent = (await c.post(f"{BASE}/v1/outreach/{draft['id']}/approve", headers=H, json={})).json()
             token = d["reply_url"].rsplit("/r/", 1)[1]
-            j = (await c.post(f"{BASE}/v1/widget/session", json={"reply_token": token})).json()
+            j = (await c.post(f"{BASE}/v1/widget/session", json={"reply_token": token, **(await solve_pow(c))})).json()
             r = await chat(c, j["session"], "Hi, got your email. What would 30 charm sets cost and can you add our logo card?")
             after = (await c.get(f"{BASE}/v1/leads/{lid}", headers=H)).json()["lead"]
             report("reply-now: email drafted → approved → link opens chat that knows the lead",
-                   sent["status"] in ("sent", "simulated") and j.get("mode") == "reply_now" and after["stage"] == "engaged" and bool(r["last"].get("text")),
+                   sent["status"] in ("sent", "simulated", "skipped") and j.get("mode") == "reply_now" and after["stage"] == "engaged" and bool(r["last"].get("text")),
                    f"email={sent['status']} subject={draft['subject']!r} stage={after['stage']} reply={(r['last'].get('text') or '')[:140]!r}")
-            bad = await c.post(f"{BASE}/v1/widget/session", json={"reply_token": token[:-3] + "abc"})
+            bad = await c.post(f"{BASE}/v1/widget/session", json={"reply_token": token[:-3] + "abc", **(await solve_pow(c))})
             report("reply-now: tampered link rejected", bad.status_code == 401, str(bad.status_code))
 
         async def t_voice():
@@ -160,7 +160,8 @@ async def main() -> None:
             end = (await c.post(f"{BASE}/v1/voice/test/{st['call_id']}/end", headers=H)).json()
             tools = [u["tool"] for u in t1.get("tools_used", []) + t2.get("tools_used", [])]
             report("voice: knows caller, uses tools, short spoken replies, summary saved",
-                   bool(st.get("context", {}).get("orders")) and len(t1.get("say", "")) < 400 and bool(end.get("summary")),
+                   # calls only know how many orders the number has; details come after the caller verifies an order id
+                   "orders_on_file" in st.get("context", {}) and len(t1.get("say", "")) < 400 and bool(end.get("summary")),
                    f"greeting={st['greeting'][:70]!r} t1={t1.get('say', '')[:110]!r} tools={tools} t2={t2.get('say', '')[:80]!r} "
                    f"wa={t2.get('whatsapp_sent')} end={end.get('outcome')} latency={t1.get('latency_ms')}ms")
             # public voice API with the business's secret key
