@@ -153,6 +153,13 @@
   if (mode === 'reply_now' || !embedded) document.documentElement.classList.add('full');
   if (embedded && mode === 'widget' && !params.get('playground')) $('close').style.display = 'block';
   $('close').onclick = function () { parent.postMessage({ type: 'sahay:close' }, '*'); };
+  // Start over: a new, empty conversation (the earlier one stays with the business); the greeting comes back
+  $('reset').onclick = function () {
+    if (!S.session) return;
+    var b = $('reset'); b.disabled = true;
+    api('/v1/widget/reset', { session: S.session }).then(function () { S.lastSig = ''; S.pending = null; file.value = ''; render([]); input.focus(); })
+      .catch(function () {}).then(function () { b.disabled = false; });
+  };
 
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }

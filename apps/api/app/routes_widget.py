@@ -292,6 +292,22 @@ async def widget_send(request: Request, session: str = Form(...), text: str = Fo
     return {"ok": True, "message_id": m and str(m["id"])}
 
 
+class ResetBody(BaseModel):
+    session: str
+
+
+@router.post("/v1/widget/reset")
+async def widget_reset(body: ResetBody, request: Request):
+    """Start the chat over: a new, empty conversation. Earlier ones stay in the dashboard; the next message starts fresh."""
+    limit(request, "reset", 20)
+    sess = _read_session(body.session)
+    async with tenant_session(sess["t"]) as db:
+        row = await db.one("SELECT customer_id FROM customer_identities WHERE kind='webchat_visitor' AND value=:v", v=sess["v"])
+        if row:
+            await db.exec("INSERT INTO conversations (tenant_id, customer_id, channel) VALUES (:t,:c,'webchat')", t=sess["t"], c=row["customer_id"])
+    return {"ok": True}
+
+
 @router.get("/v1/widget/poll")
 async def widget_poll(session: str):
     sess = _read_session(session)
