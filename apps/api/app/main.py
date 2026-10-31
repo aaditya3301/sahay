@@ -45,10 +45,11 @@ async def warm_up():
 
     if telegram.enabled() and settings.telegram_polling:
         asyncio.get_event_loop().create_task(telegram.poll_forever())
-    from app import email_inbox
+    from app import email_inbox, pipeline
 
     if email_inbox.enabled():  # the central mailbox: new customer emails become tickets
         asyncio.get_event_loop().create_task(email_inbox.poll_forever())
+    asyncio.get_event_loop().create_task(pipeline.recover_forever())  # answers messages a restart interrupted
 
 
 @app.exception_handler(ValueError)

@@ -650,6 +650,41 @@ async def run_pipeline(tenant_id: str, conversation_id: str, upto_message_id: st
         await _run(tenant_id, conversation_id, upto_message_id)
 
 
+async def requeue_unhandled(min_age_s: int = 90, max_age_min: int = 15) -> int:
+    """A message is saved first and the agent runs afterwards as an in-process job, so a restart in between (a deploy, a
+    crash, a code reload) would leave that customer unanswered for good. This finds customer messages saved a minute or two
+    ago that the agent never triaged and runs it on them. Running it twice is harmless: the agent only handles messages
+    that have not been triaged yet, one conversation at a time."""
+    from app.db import system_session
+
+    async with system_session() as db:
+        tenants = [str(r["id"]) for r in await db.all("SELECT id FROM tenants WHERE status='active'")]
+    queued = 0
+    for tid in tenants:
+        async with tenant_session(tid) as db:
+            rows = await db.all(
+                "SELECT DISTINCT ON (m.conversation_id) m.id, m.conversation_id FROM messages m JOIN conversations c ON c.id=m.conversation_id "
+                "WHERE m.direction='in' AND m.triage IS NULL AND m.channel IN ('email','telegram','webchat') AND NOT c.is_simulation "
+                "AND m.created_at < now() - make_interval(secs => :lo) AND m.created_at > now() - make_interval(mins => :hi) "
+                "ORDER BY m.conversation_id, m.created_at DESC", lo=min_age_s, hi=max_age_min)
+        for r in rows:
+            log.warning("message %s was saved but never handled (the server probably restarted): running the agent on it", r["id"])
+            enqueue(run_pipeline, tid, str(r["conversation_id"]), str(r["id"]), name="pipeline-recover")
+            queued += 1
+    return queued
+
+
+async def recover_forever() -> None:
+    """Check for unhandled messages shortly after start-up (right after a deploy or restart) and then every minute."""
+    await asyncio.sleep(20)
+    while True:
+        try:
+            await requeue_unhandled()
+        except Exception:
+            log.exception("recovery sweep failed")
+        await asyncio.sleep(60)
+
+
 async def _run(tenant_id: str, conversation_id: str, upto_message_id: str) -> None:
     t_start = time.perf_counter()
     # ---- stage 1: triage + ticket ----------------------------------------
