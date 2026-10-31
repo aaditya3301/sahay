@@ -213,6 +213,8 @@ export function LeadDetail() {
   const qualify = useMutation({ mutationFn: () => api(`/v1/leads/${id}/qualify`, { method: 'POST' }), onSuccess: inv })
   const draft = useMutation({ mutationFn: (kind: string) => api(`/v1/leads/${id}/draft-email?kind=${kind}`, { method: 'POST' }), onSuccess: inv })
   const [confirmCall, setConfirmCall] = useState(false)
+  const [writeEmail, setWriteEmail] = useState(false)
+  const [logCall, setLogCall] = useState(false)
   const call = useMutation({ mutationFn: () => api(`/v1/leads/${id}/call`, { method: 'POST' }), onSuccess: inv })
   if (isLoading || !data) return <Spinner />
   const l = data.lead
@@ -225,8 +227,6 @@ export function LeadDetail() {
         actions={<>
           <select className={inputCls + ' w-44'} value={l.stage} onChange={(e) => patch.mutate({ stage: e.target.value })}>{STAGES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}</select>
           <Button variant="secondary" onClick={() => qualify.mutate()} loading={qualify.isPending}>Re-qualify</Button>
-          {l.email && <Button variant="secondary" onClick={() => draft.mutate(sentAny ? 'followup' : 'first')} loading={draft.isPending}><Mail className="h-4 w-4" />{sentAny ? 'Draft follow-up' : 'Draft email'}</Button>}
-          {l.phone && <Button onClick={() => { call.reset(); setConfirmCall(true) }}><PhoneOutgoing className="h-4 w-4" />Call</Button>}
         </>} />
       {(qualify.isSuccess || draft.isSuccess) && <div className="mb-3 text-xs text-slate-500">Queued — results appear here in a few seconds.</div>}
       <Modal open={confirmCall} onClose={() => setConfirmCall(false)} title={`Call ${l.company || l.name || 'this lead'}?`}>
@@ -243,6 +243,24 @@ export function LeadDetail() {
       </Modal>
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <div className="space-y-4">
+          <Card title="Reach out">
+            <div className="reach-grid">
+              <button type="button" className="reach-option" disabled={!l.email} onClick={() => setWriteEmail(true)}>
+                <Mail size={18} aria-hidden="true" /><span><strong>Write an email</strong><small>{l.email ? 'Your own words, sent from your business email.' : 'No email address on this lead.'}</small></span>
+              </button>
+              <button type="button" className="reach-option" disabled={!l.phone} onClick={() => setLogCall(true)}>
+                <Phone size={18} aria-hidden="true" /><span><strong>Call it yourself</strong><small>{l.phone ? 'Call from your own phone, then log how it went.' : 'No phone number on this lead.'}</small></span>
+              </button>
+              <button type="button" className="reach-option" disabled={!l.email || draft.isPending} onClick={() => draft.mutate(sentAny ? 'followup' : 'first')}>
+                <Mail size={18} aria-hidden="true" /><span><strong>{sentAny ? 'AI follow-up' : 'AI drafts an email'}</strong><small>The AI writes it; nothing sends until you approve.</small></span>
+              </button>
+              <button type="button" className="reach-option" disabled={!l.phone} onClick={() => { call.reset(); setConfirmCall(true) }}>
+                <PhoneOutgoing size={18} aria-hidden="true" /><span><strong>AI calls them</strong><small>Your voice agent calls from your business number.</small></span>
+              </button>
+            </div>
+          </Card>
+          <WriteEmailModal open={writeEmail} onClose={() => setWriteEmail(false)} lead={l} onDone={inv} />
+          <LogCallModal open={logCall} onClose={() => setLogCall(false)} lead={l} onDone={inv} />
           {data.emails.filter((e: any) => e.status === 'draft').map((e: any) => <EmailDraft key={e.id} e={e} onDone={inv} />)}
           <Card title="Timeline">
             <div className="space-y-2">
@@ -323,6 +341,54 @@ export function LeadDetail() {
         </div>
       </div>
     </>
+  )
+}
+
+// Write your own email to the lead; it goes out through the business's email setup exactly as written
+function WriteEmailModal({ open, onClose, lead, onDone }: { open: boolean; onClose: () => void; lead: any; onDone: () => void }) {
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const send = useMutation({ mutationFn: () => api(`/v1/leads/${lead.id}/email`, { body: { subject, body } }), onSuccess: onDone })
+  const sentOk = send.data?.status === 'sent' || send.data?.status === 'simulated'
+  const close = () => { onClose(); if (sentOk) { setSubject(''); setBody('') } send.reset() }
+  return (
+    <Modal open={open} onClose={close} title={`Email ${lead.company || lead.name || 'this lead'}`} wide>
+      <div className="space-y-3">
+        {!sentOk ? <>
+          <Field label="To"><input className={inputCls} value={lead.email || ''} readOnly /></Field>
+          <Field label="Subject"><input className={inputCls} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="A quick hello from us" /></Field>
+          <Field label="Message" hint="Sent exactly as you write it, from your business's email."><textarea className={inputCls} rows={9} value={body} onChange={(e) => setBody(e.target.value)} placeholder={`Hi ${(lead.name || lead.company || '').split(' ')[0] || 'there'},`} /></Field>
+          {send.isError && <div className="text-xs text-red-600">{(send.error as Error).message}</div>}
+          {send.data && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{send.data.status === 'skipped' ? 'This address can’t receive email, so nothing was sent.' : 'The email couldn’t be sent. Check Workspace → Integrations and try again.'}</div>}
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={close}>Cancel</Button><Button onClick={() => send.mutate()} loading={send.isPending} disabled={!subject.trim() || !body.trim()}><Mail className="h-4 w-4" />Send email</Button></div>
+        </> : (
+          <>
+            <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{send.data.status === 'sent' ? `Sent to ${lead.email}.` : 'Saved on the lead. It is marked simulated because your email isn’t connected yet.'}</div>
+            <div className="flex justify-end"><Button onClick={close}>Done</Button></div>
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+const CALL_OUTCOMES: [string, string][] = [['connected', 'Spoke with them'], ['no_answer', 'No answer'], ['voicemail', 'Left a voicemail'], ['call_back', 'Call back later'], ['not_interested', 'Not interested']]
+
+// Call from your own phone, then log it: it shows in Sales → Calls and on the lead, and moves the lead along
+function LogCallModal({ open, onClose, lead, onDone }: { open: boolean; onClose: () => void; lead: any; onDone: () => void }) {
+  const [outcome, setOutcome] = useState('connected')
+  const [notes, setNotes] = useState('')
+  const save = useMutation({ mutationFn: () => api(`/v1/leads/${lead.id}/manual-call`, { body: { outcome, notes } }), onSuccess: () => { onDone(); setNotes(''); setOutcome('connected'); onClose() } })
+  return (
+    <Modal open={open} onClose={onClose} title={`Call ${lead.company || lead.name || 'this lead'} yourself`}>
+      <div className="space-y-3 text-sm">
+        <a className="reach-dial" href={`tel:${lead.phone}`}><Phone size={16} aria-hidden="true" />{lead.phone}<small>Tap to dial on your phone</small></a>
+        <Field label="How did it go?"><select className={inputCls} value={outcome} onChange={(e) => setOutcome(e.target.value)}>{CALL_OUTCOMES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></Field>
+        <Field label="Notes" hint="What was said, what they need, what to do next."><textarea className={inputCls} rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        {save.isError && <div className="text-xs text-red-600">{(save.error as Error).message}</div>}
+        <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={() => save.mutate()} loading={save.isPending}>Save call</Button></div>
+      </div>
+    </Modal>
   )
 }
 

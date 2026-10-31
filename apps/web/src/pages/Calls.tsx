@@ -9,7 +9,7 @@ import { ago, humanize, time } from '../lib/format'
 
 const purposeLabel = (p?: string) => (p === 'web_call' ? 'Website voice' : humanize(p))
 
-const outcomeTone = (o?: string) => ({ resolved: 'green', cod_confirmed: 'green', lead_captured: 'violet', escalated: 'red', follow_up: 'amber', no_answer: 'slate', cancel_requested: 'orange' } as any)[o || ''] || 'slate'
+const outcomeTone = (o?: string) => ({ resolved: 'green', cod_confirmed: 'green', lead_captured: 'violet', escalated: 'red', follow_up: 'amber', no_answer: 'slate', cancel_requested: 'orange', connected: 'green', voicemail: 'slate', call_back: 'amber', not_interested: 'slate' } as any)[o || ''] || 'slate'
 
 export default function Calls() {
   const tref = useTicketRef()
@@ -91,7 +91,8 @@ function CallDetail({ id, onClose }: { id: string; onClose: () => void }) {
               : c.customer_id && <Link to={`/customers/${c.customer_id}`} className="text-xs text-brand-700 underline">Customer profile</Link>}
           </div>
           {c.summary && <div className="rounded-lg bg-slate-50 p-3 text-sm"><div className="text-slate-800">{c.summary}</div>{c.next_step && <div className="mt-1 text-xs text-slate-600">Next step: {c.next_step}</div>}</div>}
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto rounded-lg border border-slate-100 p-3 scroll-thin">
+          {c.context?.manual && <div className="rounded-lg border border-slate-100 px-3 py-2 text-xs text-slate-500">Logged by {c.context.by || 'your team'} after calling from their own phone.</div>}
+          <div className={cx('max-h-[50vh] space-y-2 overflow-y-auto rounded-lg border border-slate-100 p-3 scroll-thin', c.context?.manual && 'hidden')}>
             {(c.transcript || []).map((m: any, i: number) => (
               <div key={i} className={cx('flex', m.role === 'caller' ? 'justify-end' : 'justify-start')}>
                 <div className={cx('max-w-[80%] rounded-xl px-3 py-2 text-sm', m.role === 'caller' ? 'bg-brand-600 text-white' : 'border border-slate-200 bg-white')}>

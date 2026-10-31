@@ -272,6 +272,17 @@
 .campaign-toolbar-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .campaign-approval-note { display: flex; align-items: center; gap: 8px; color: var(--dashboard-muted); font-size: 13px; }
 .campaign-approval-note > svg { flex: none; }
+/* Reach out: write an email, call yourself, or let the AI do either */
+.reach-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.reach-option { display: flex; align-items: flex-start; gap: 12px; padding: 13px 14px; border: 1px solid var(--dashboard-border); border-radius: 14px; background: var(--dashboard-field); color: var(--dashboard-ink); text-align: left; cursor: pointer; transition: background-color 150ms, border-color 150ms; }
+.reach-option:hover:not(:disabled) { background: var(--dashboard-active); border-color: color-mix(in srgb, var(--dashboard-blue) 35%, var(--dashboard-border)); }
+.reach-option:disabled { opacity: .5; cursor: not-allowed; }
+.reach-option > svg { flex: none; margin-top: 2px; color: var(--dashboard-blue); }
+.reach-option strong { display: block; font-size: 14px; font-weight: 600; }
+.reach-option small { display: block; margin-top: 2px; color: var(--dashboard-muted); font-size: 12px; line-height: 1.4; }
+.reach-dial { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--dashboard-active); color: var(--dashboard-ink); font-size: 16px; font-weight: 600; text-decoration: none; }
+.reach-dial small { margin-left: auto; color: var(--dashboard-muted); font-size: 12px; font-weight: 400; }
+
 /* Google Maps scrape results */
 .maps-results { display: grid; gap: 8px; max-height: 52vh; overflow-y: auto; padding: 0; margin: 0; list-style: none; }
 .maps-results > li { padding: 10px 12px; border: 1px solid var(--dashboard-border); border-radius: 12px; background: var(--dashboard-field); }

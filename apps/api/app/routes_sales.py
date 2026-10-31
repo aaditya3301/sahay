@@ -302,6 +302,71 @@ async def lead_call(lid: str, ctx: Ctx = CtxDep):
         return jsonable({"call_id": str(call_id), "queued": True, "error": e.detail})
 
 
+class ManualEmail(BaseModel):
+    subject: str
+    body: str
+
+
+@router.post("/leads/{lid}/email")
+async def lead_email(lid: str, body: ManualEmail, ctx: Ctx = CtxDep):
+    """Send an email you wrote yourself to the lead, through the business's own email setup. Nothing is added to it."""
+    subject, text = body.subject.strip(), body.body.strip()
+    if not subject or not text:
+        raise HTTPException(400, "Write a subject and a message")
+    async with tenant_session(ctx.tenant_id) as db:
+        l = await db.one("SELECT * FROM leads WHERE id=:id", id=lid)
+        if not l:
+            raise HTTPException(404)
+        if not l["email"]:
+            raise HTTPException(400, "This lead has no email address")
+        if l["customer_id"] and await db.val("SELECT marketing_opt_out FROM customers WHERE id=:c", c=l["customer_id"]):
+            raise HTTPException(400, "This person asked us to stop contacting them")
+        row = await db.one("INSERT INTO outreach_emails (tenant_id, lead_id, kind, subject, body) VALUES (:t,:l,'manual',:s,:b) RETURNING id",
+                           t=ctx.tenant_id, l=lid, s=subject[:250], b=text)
+        return jsonable(await sales.send_outreach(db, str(row["id"]), ctx.user_name))
+
+
+MANUAL_CALL_OUTCOMES = {  # outcome → (label, stage it moves the lead to, if still early in the pipeline)
+    "connected": ("Spoke with them", "engaged"), "no_answer": ("No answer", "contacted"), "voicemail": ("Left a voicemail", "contacted"),
+    "call_back": ("Call back later", "callback"), "not_interested": ("Not interested", "dropped"),
+}
+
+
+class ManualCall(BaseModel):
+    outcome: str
+    notes: str = ""
+
+
+@router.post("/leads/{lid}/manual-call")
+async def lead_manual_call(lid: str, body: ManualCall, ctx: Ctx = CtxDep):
+    """Log a call you made yourself from your own phone: it shows in Sales → Calls and on the lead, and moves the lead on."""
+    if body.outcome not in MANUAL_CALL_OUTCOMES:
+        raise HTTPException(400, "Pick how the call went")
+    label, stage = MANUAL_CALL_OUTCOMES[body.outcome]
+    notes = body.notes.strip()
+    async with tenant_session(ctx.tenant_id) as db:
+        l = await db.one("SELECT * FROM leads WHERE id=:id", id=lid)
+        if not l:
+            raise HTTPException(404)
+        if not l["phone"]:
+            raise HTTPException(400, "This lead has no phone number")
+        call_id = await db.val(
+            "INSERT INTO voice_calls (tenant_id, direction, purpose, to_number, customer_id, lead_id, status, summary, outcome, next_step, context, "
+            "started_at, ended_at) VALUES (:t,'outbound','manual_call',:p,:c,:l,'completed',:s,:o,:n,:x, now(), now()) RETURNING id",
+            t=ctx.tenant_id, p=l["phone"], c=l["customer_id"], l=lid, s=notes or label, o=body.outcome,
+            n="Call back" if body.outcome == "call_back" else None, x={"manual": True, "by": ctx.user_name})
+        await db.exec("UPDATE leads SET last_contact_at=now(), updated_at=now() WHERE id=:id", id=lid)
+        if body.outcome == "call_back":
+            await db.exec("UPDATE leads SET next_action='Call back', next_action_at=now() + interval '1 day' WHERE id=:id", id=lid)
+        early = l["stage"] in ("new", "qualified", "contacted")
+        if l["stage"] != "customer" and (early or stage in ("dropped", "callback")):  # never pull a customer back into the pipeline
+            await sales.set_stage(db, lid, stage, ctx.user_name, f"call: {label.lower()}")
+        await sales.add_event(db, lid, "call", f"{ctx.user_name} called {l['phone']}: {label}" + (f" · {notes}" if notes else ""),
+                              {"by": ctx.user_name, "outcome": body.outcome, "manual": True})
+        await audit(db, "human", ctx.user_name, "lead.manual_call", "lead", lid, {"call_id": str(call_id), "outcome": body.outcome})
+    return {"ok": True, "call_id": str(call_id)}
+
+
 @router.get("/outreach")
 async def outreach(ctx: Ctx = CtxDep, status: str = "draft"):
     async with tenant_session(ctx.tenant_id) as db:
