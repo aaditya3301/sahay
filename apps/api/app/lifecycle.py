@@ -83,6 +83,8 @@ async def _sarvam_ready(tenant_id: str) -> bool:
 async def run_lifecycle(tenant_id: str) -> dict:
     from app.profile import load_profile
 
+    if settings.automations_paused:
+        return {"paused": True}
     done = {"delay_alerts": 0, "cod_confirmations": 0, "cart_reminders": 0, "followups_drafted": 0, "leads_dropped": 0, "calls_dispatched": 0}
     async with tenant_session(tenant_id) as db:
         prof = await load_profile(db)
@@ -233,8 +235,11 @@ async def daily_summary(tenant_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Campaigns
 # ---------------------------------------------------------------------------
+# Campaigns only ever reach converted customers (people with an order). Sales leads who haven't bought are never in an
+# audience: they're contacted one by one from Leads.
 SEGMENTS = {
-    "all": ("Everyone who ordered", "SELECT DISTINCT ON (customer_phone) customer_name, customer_phone, customer_email FROM commerce_orders WHERE status <> 'cancelled'"),
+    "all": ("All customers (everyone who ordered)", "SELECT DISTINCT ON (customer_phone) customer_name, customer_phone, customer_email FROM commerce_orders "
+                                                   "WHERE status NOT IN ('cancelled','payment_pending')"),
     "recent_buyers": ("Bought in the last 30 days", "SELECT DISTINCT ON (customer_phone) customer_name, customer_phone, customer_email FROM commerce_orders WHERE status='delivered' AND placed_at > now()-interval '30 days'"),
     "repeat": ("Ordered 2+ times", "SELECT customer_name, customer_phone, max(customer_email) AS customer_email FROM commerce_orders GROUP BY customer_name, customer_phone HAVING count(*) >= 2"),
     "inactive": ("No order in 45+ days", "SELECT customer_name, customer_phone, max(customer_email) AS customer_email FROM commerce_orders GROUP BY customer_name, customer_phone HAVING max(placed_at) < now()-interval '45 days'"),
@@ -242,12 +247,8 @@ SEGMENTS = {
 
 
 async def audience(db, aud: dict, limit: int = 2000) -> dict:
-    seg = aud.get("segment") or "recent_buyers"
-    if seg == "leads":
-        rows = await db.all("SELECT name AS customer_name, phone AS customer_phone, email AS customer_email FROM leads WHERE stage NOT IN ('dropped','customer') "
-                            "AND (phone IS NOT NULL OR email IS NOT NULL) LIMIT :n", n=limit)
-    else:
-        rows = await db.all(SEGMENTS.get(seg, SEGMENTS["recent_buyers"])[1] + " LIMIT :n", n=limit)
+    seg = aud.get("segment") or "all"
+    rows = await db.all(SEGMENTS.get(seg, SEGMENTS["all"])[1] + " LIMIT :n", n=limit)
     eligible, suppressed = [], []
     for r in rows:
         cust = await db.one("SELECT c.id, c.marketing_opt_out FROM customer_identities i JOIN customers c ON c.id=i.customer_id "
@@ -441,8 +442,8 @@ async def tick(tenant_id: str, now_ist: datetime | None = None) -> dict:
     from app import insights
 
     t = now_ist or datetime.now(IST)
-    out: dict = {"lifecycle": await run_lifecycle(tenant_id)}
-    if t.hour == 21:
+    out: dict = {"lifecycle": await run_lifecycle(tenant_id)}  # {"paused": True} while automations are paused
+    if t.hour == 21 and not settings.automations_paused:
         out["daily_summary"] = bool(await daily_summary(tenant_id))
     if t.weekday() == 0 and t.hour < 12:
         async with tenant_session(tenant_id) as db:
@@ -450,7 +451,7 @@ async def tick(tenant_id: str, now_ist: datetime | None = None) -> dict:
                 await insights.build_gap_suggestions(db, tenant_id)
                 await insights.weekly_report(db, tenant_id)
                 out["weekly_report"] = True
-    if t.day == 1:
+    if t.day == 1 and not settings.automations_paused:
         out["newsletter"] = bool(await draft_newsletter(tenant_id))
     return out
 

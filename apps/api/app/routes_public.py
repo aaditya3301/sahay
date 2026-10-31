@@ -420,6 +420,8 @@ async def cron(job: str, request: Request):
     if job == "daily-summary":
         from app.lifecycle import daily_summary
 
+        if settings.automations_paused:
+            return {"queued": 0, "paused": True}
         for tid in tenants:
             enqueue(daily_summary, tid, name=f"summary-{tid}", queue="lifecycle")
         return {"queued": len(tenants)}
