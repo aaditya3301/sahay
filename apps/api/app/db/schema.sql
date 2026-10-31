@@ -649,6 +649,20 @@ ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS subject text;
 -- Per-business ticket numbers (LL-1042) and the business's own integrations
 ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS ticket_prefix text;
 ALTER TABLE commerce_orders ADD COLUMN IF NOT EXISTS tracking_url text;
+-- People who sign up on a store's storefront (demo or real). Each is linked to a customer record the owner sees.
+CREATE TABLE IF NOT EXISTS shoppers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  customer_id uuid REFERENCES customers(id) ON DELETE SET NULL,
+  name text NOT NULL,
+  email text NOT NULL,
+  phone text NOT NULL,
+  password_hash text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_login_at timestamptz,
+  UNIQUE (tenant_id, email)
+);
+
 -- New workspaces walk through the setup wizard once; every existing workspace counts as set up
 ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS setup_done boolean NOT NULL DEFAULT true;
 -- The agent replies automatically by default (there is no per-workspace switch for it in the dashboard)
@@ -727,7 +741,7 @@ BEGIN
     'kb_documents','kb_chunks','kb_gaps','kb_gap_suggestions','policies','actions','approvals',
     'audit_log','security_events','fraud_signals','insights_reports','sim_runs','sim_cases',
     'agent_profiles','lead_searches','leads','lead_events','outreach_emails','campaigns','campaign_sends',
-    'voice_calls','lifecycle_events','commerce_carts','integration_events','webhook_endpoints','webhook_deliveries'])
+    'voice_calls','lifecycle_events','commerce_carts','integration_events','webhook_endpoints','webhook_deliveries','shoppers'])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);

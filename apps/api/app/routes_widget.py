@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from collections import defaultdict, deque
@@ -449,6 +450,110 @@ class CheckoutBody(BaseModel):
     name: str = ""
     phone: str = ""
     email: str | None = None
+# ---------------------------------------------------------------------------
+# Storefront shoppers: sign up / log in on the demo (or a real) store. Each becomes a customer the owner can see.
+# ---------------------------------------------------------------------------
+SHOPPER_DAYS = 30  # stay logged in on that browser for a month
+
+
+def _shopper_token(tid: str, shopper_id: str) -> str:
+    return jwt.encode({"typ": "shopper", "t": tid, "s": shopper_id, "exp": int(time.time()) + SHOPPER_DAYS * 86400}, settings.jwt_secret, "HS256")
+
+
+def _read_shopper_token(token: str | None) -> dict | None:
+    try:
+        d = jwt.decode(token or "", settings.jwt_secret, ["HS256"])
+        return d if d.get("typ") == "shopper" else None
+    except Exception:
+        return None
+
+
+def _shopper_view(row: dict) -> dict:
+    return {"name": row["name"], "email": row["email"], "phone": row["phone"]}
+
+
+async def _chat_identity(db, row: dict) -> dict:
+    """What the storefront hands the chat widget: the shopper, signed with the business's secret key (the same way a
+    business's own site would sign a logged-in customer), so the chat treats them as verified."""
+    secret = (await load_profile(db)).get("secret_key") or ""
+    user_hash = hmac.new(secret.encode(), row["email"].strip().lower().encode(), hashlib.sha256).hexdigest()
+    return {"user": _shopper_view(row), "userHash": user_hash}
+
+
+class ShopperSignup(BaseModel):
+    key: str
+    name: str
+    email: str
+    password: str
+    phone: str
+
+
+class ShopperLogin(BaseModel):
+    key: str
+    email: str
+    password: str
+
+
+@router.post("/v1/widget/shopper/signup")
+async def shopper_signup(body: ShopperSignup, request: Request):
+    from app.core import hash_password
+    from app.pipeline import InboundMessage, resolve_customer
+
+    limit(request, "shopper-signup", 8)
+    tid = await _site_tenant(body.key)
+    name = " ".join(body.name.split())[:100]
+    email = norm_email(body.email)
+    phone = norm_phone(body.phone)
+    if len(name) < 2:
+        raise HTTPException(400, "Enter your name.")
+    if not email or not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        raise HTTPException(400, "Enter a valid email address.")
+    if len(body.password) < 8:
+        raise HTTPException(400, "Use at least 8 characters for your password.")
+    if not phone or len(phone) != 13 or not phone.startswith("+91"):
+        raise HTTPException(400, "Enter a 10-digit Indian mobile number.")
+    async with tenant_session(tid) as db:
+        if await db.one("SELECT 1 FROM shoppers WHERE email=:e", e=email):
+            raise HTTPException(409, "An account already exists with this email. Log in instead.")
+        # the owner sees this person under Customers (name, email, phone); later orders attach through the phone number
+        cust = await resolve_customer(db, InboundMessage(channel="storefront", from_phone=phone, from_email=email, from_name=name))
+        row = await db.one(
+            "INSERT INTO shoppers (tenant_id, customer_id, name, email, phone, password_hash, last_login_at) VALUES (:t,:c,:n,:e,:p,:h, now()) RETURNING *",
+            t=tid, c=cust["id"], n=name, e=email, p=phone, h=hash_password(body.password))
+        if not cust.get("display_name"):
+            await db.exec("UPDATE customers SET display_name=:n WHERE id=:c", n=name, c=cust["id"])
+        await audit(db, "customer", name, "shopper.signup", "customer", cust["id"], {"via": "storefront"})
+        chat = await _chat_identity(db, row)
+    return {"token": _shopper_token(tid, str(row["id"])), "shopper": _shopper_view(row), "chat": chat}
+
+
+@router.post("/v1/widget/shopper/login")
+async def shopper_login(body: ShopperLogin, request: Request):
+    from app.core import check_password
+
+    limit(request, "shopper-login", 12)
+    tid = await _site_tenant(body.key)
+    async with tenant_session(tid) as db:
+        row = await db.one("SELECT * FROM shoppers WHERE email=:e", e=norm_email(body.email))
+        if not row or not check_password(body.password, row["password_hash"]):
+            raise HTTPException(401, "That email and password don't match.")
+        await db.exec("UPDATE shoppers SET last_login_at=now() WHERE id=:id", id=row["id"])
+        chat = await _chat_identity(db, row)
+    return {"token": _shopper_token(tid, str(row["id"])), "shopper": _shopper_view(row), "chat": chat}
+
+
+@router.get("/v1/widget/shopper/me")
+async def shopper_me(request: Request, key: str):
+    tid = await _site_tenant(key)
+    d = _read_shopper_token((request.headers.get("authorization") or "").removeprefix("Bearer ").strip())
+    if not d or d.get("t") != tid:
+        raise HTTPException(401, "Please log in again.")
+    async with tenant_session(tid) as db:
+        row = await db.one("SELECT * FROM shoppers WHERE id=:id", id=d["s"])
+        chat = await _chat_identity(db, row) if row else None
+    if not row:
+        raise HTTPException(401, "Please log in again.")
+    return {"shopper": _shopper_view(row), "chat": chat}
 
 
 class ConfirmBody(BaseModel):
