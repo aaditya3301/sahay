@@ -84,12 +84,23 @@ def _tokens(s: str) -> list[str]:
 
 
 def name_matches(typed: str, actual: str) -> bool:
-    """The first name must match; every other word typed must appear in the account's name (small typos allowed)."""
+    """The first name must match; every other word typed must appear in the account's name, unless the account only has a
+    first name (small typos allowed). "Anant Singhal" also matches an account written as one word, "anantsinghal"."""
     t, a = _tokens(typed), _tokens(actual)
     if not t or not a:
         return False
     close = lambda x, y: x == y or (len(x) >= 4 and difflib.SequenceMatcher(None, x, y).ratio() >= 0.84)  # noqa: E731
-    return close(t[0], a[0]) and all(any(close(x, y) for y in a) for x in t)
+    if len(t) > 1 and close("".join(t), "".join(a)):
+        return True
+    return close(t[0], a[0]) and (len(a) == 1 or all(any(close(x, y) for y in a) for x in t))
+
+
+async def _names_on_file(tenant_id: str, customer_id: str, phone: str) -> list[str]:
+    """Every name the business has for this person: the customer record, their storefront login and their orders."""
+    async with tenant_session(tenant_id) as db:
+        rows = await db.all("SELECT display_name AS n FROM customers WHERE id=:c UNION SELECT name FROM shoppers WHERE customer_id=:c OR phone=:p "
+                            "UNION SELECT customer_name FROM commerce_orders WHERE customer_phone=:p", c=customer_id, p=phone)
+    return [r["n"] for r in rows if r["n"]]
 
 
 def parse_contact(text: str) -> tuple[str | None, str | None]:
@@ -134,12 +145,13 @@ async def _connect(chat: dict, name: str | None, phone: str, own_number: bool, t
     prefer = str(chat["preferred_tenant"]) if chat.get("preferred_tenant") else None
     found = await routing.find_customer(phone=phone, only=prefer)
     if found:
-        f = found[0]
-        if not own_number and not name_matches(name or "", f["name"] or ""):
-            # a typed number must come with the name on that account; the contact button proves the number is theirs
-            return await _miss(chat, f"That name doesn't match the account for {_shown(phone)}. Please send your full name again, "
-                                     "or tap “Share my number” below.", keep_phone=phone)
-        tid = f["tenant_id"]
+        if not own_number:
+            # a typed number must come with a name that business has for it; the contact button proves the number is theirs
+            found = [f for f in found if any(name_matches(name or "", n) for n in await _names_on_file(f["tenant_id"], f["customer_id"], phone))]
+            if not found:
+                return await _miss(chat, f"That name doesn't match the account for {_shown(phone)}. Please send your full name again, "
+                                         "or tap “Share my number” below.", keep_phone=phone)
+        tid = found[0]["tenant_id"]
     elif prefer:  # opened from a shop's own link: a new customer of that shop
         tid = prefer
     else:
