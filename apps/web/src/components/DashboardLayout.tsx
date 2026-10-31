@@ -108,7 +108,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const isProfile = pathname.startsWith('/profile')
   const activeGroup = groups.find((group) => group.items.some((item) => belongsTo(pathname, item.to)))
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => activeGroup?.id || null)
-  const page = [...primary, ...groups.flatMap((group) => group.items)].find((item) => belongsTo(pathname, item.to))
+  const page = [...primary, ...groups.flatMap((group) => group.items), ...linked, { to: '/profile', label: 'Profile' }].find((item) => belongsTo(pathname, item.to))
+  const parentLabel = isProfile ? 'Account' : activeGroup?.label || (linked.some((item) => belongsTo(pathname, item.to)) ? 'Workspace' : 'Customer care')
   const pageName = pathname.startsWith('/tickets/') ? 'Conversation' : page?.label || 'Inbox'
 
   useEffect(() => {
@@ -144,7 +145,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <header className="dashboard-topbar">
       <div className="dashboard-location">
         <button ref={menuButton} type="button" className="dashboard-menu-button dashboard-icon-button" aria-label="Open navigation" aria-haspopup="dialog" onClick={() => dialog.current?.showModal()}><Menu size={20} /></button>
-        <span className="dashboard-location-parent">{activeGroup?.label || 'Customer care'}</span><ChevronRight className="dashboard-location-divider" size={14} aria-hidden="true" />
+        <span className="dashboard-location-parent">{parentLabel}</span><ChevronRight className="dashboard-location-divider" size={14} aria-hidden="true" />
         <span className="dashboard-location-current">{pageName}</span>
       </div>
       <WorkspaceSwitcher tenants={tenants} currentId={current?.id}
@@ -188,8 +189,10 @@ function Sidebar({ primary, groups, pathname, expandedGroup, onExpand, widgetKey
     <div className="dashboard-sidebar-bottom">
       {widgetKey && <a className="dashboard-store-link" href={`/store/${widgetKey}`} target="_blank" rel="noreferrer"><Store size={16} aria-hidden="true" /><span>Preview store</span><ArrowUpRight size={15} aria-hidden="true" /></a>}
       <div className="dashboard-account">
-        <span className="dashboard-avatar" aria-hidden="true">{name?.split(' ').slice(0, 2).map((part) => part[0]).join('') || 'S'}</span>
-        <div className="dashboard-account-name"><span>{name}</span><small title={email}>{email}</small></div>
+        <NavLink to="/profile" onClick={onNavigate} className={({ isActive }) => cx('dashboard-account-link', isActive && 'is-active')} aria-label="Open your profile">
+          <span className="dashboard-avatar" aria-hidden="true">{name?.split(' ').slice(0, 2).map((part) => part[0]).join('') || 'S'}</span>
+          <div className="dashboard-account-name"><span>{name}</span><small title={email}>{email}</small></div>
+        </NavLink>
         <button type="button" className="dashboard-icon-button" title="Sign out" aria-label="Sign out" onClick={() => { auth.clear(); location.href = '/login' }}><LogOut size={17} /></button>
       </div>
     </div>

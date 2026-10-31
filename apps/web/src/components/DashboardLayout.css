@@ -88,6 +88,8 @@
 .dashboard-store-link:hover { color: var(--dashboard-sidebar-ink); background: var(--dashboard-sidebar-hover); }
 .dashboard-account { display: flex; align-items: center; gap: 9px; padding: 16px 0 8px; border-top: 1px solid var(--dashboard-sidebar-hover); }
 .dashboard-avatar { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--dashboard-sidebar-hover); color: var(--dashboard-sidebar-ink); font-size: 11px; font-weight: 600; }
+.dashboard-account-link { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; padding: 6px 8px; margin: -6px 0 -6px -8px; border-radius: 12px; color: inherit; transition: background 150ms; }
+.dashboard-account-link:hover, .dashboard-account-link.is-active { background: var(--dashboard-sidebar-hover); }
 .dashboard-account-name { display: grid; min-width: 0; flex: 1; font-size: 13px; }
 .dashboard-account-name > span, .dashboard-account-name > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-account-name > small { font-size: 11px; color: var(--dashboard-sidebar-muted); }
@@ -478,3 +480,31 @@
   .weekly-report-period span { text-align: left; }
   .policy-limits { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Profile page */
+.profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.profile-person { display: flex; align-items: center; gap: 16px; padding-bottom: 18px; margin-bottom: 6px; border-bottom: 1px solid var(--dashboard-border); }
+.profile-person > div { display: grid; min-width: 0; }
+.profile-person strong { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.profile-person span:not(.profile-avatar) { font-size: 14px; color: var(--dashboard-muted); overflow: hidden; text-overflow: ellipsis; }
+.profile-avatar { flex: none; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--dashboard-sidebar); color: var(--dashboard-sidebar-ink); font-size: 19px; font-weight: 600; }
+.profile-list { margin: 0; display: grid; }
+.profile-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--dashboard-border); font-size: 14.5px; }
+.profile-row:last-child { border-bottom: 0; }
+.profile-row dt { color: var(--dashboard-muted); }
+.profile-row dd { margin: 0; color: var(--dashboard-ink); overflow-wrap: break-word; min-width: 0; }
+.profile-empty { color: var(--dashboard-muted); }
+@media (max-width: 900px) { .profile-grid { grid-template-columns: minmax(0, 1fr); } .profile-row { grid-template-columns: 110px minmax(0, 1fr); } }
+
+/* Code blocks: collapsed by default, light, with a copy button */
+.code-block { width: 100%; min-width: 0; border: 1px solid var(--dashboard-border); border-radius: 14px; background: var(--dashboard-field); overflow: hidden; }
+.code-block > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 14px; list-style: none; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--dashboard-ink); }
+.code-block > summary::-webkit-details-marker { display: none; }
+.code-block > summary:hover { background: var(--dashboard-raised); }
+.code-block > summary svg { flex: none; color: var(--dashboard-muted); transition: transform 150ms; }
+.code-block[open] > summary svg { transform: rotate(180deg); }
+.code-block[open] > summary { border-bottom: 1px solid var(--dashboard-border); }
+.code-block-body { position: relative; background: var(--dashboard-raised); }
+.code-block-body pre { margin: 0; padding: 16px 16px 16px; padding-right: 92px; max-height: 340px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--dashboard-ink); }
+.code-block-copy { position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border: 1px solid var(--dashboard-border); border-radius: 999px; background: var(--dashboard-surface); color: var(--dashboard-ink); font-size: 12.5px; }
+.code-block-copy:hover { background: #fff; }
