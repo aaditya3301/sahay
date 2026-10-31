@@ -14,6 +14,17 @@ function Wordmark() {
   return <span className="dashboard-wordmark"><img src="/sahay-mark-light.svg" alt="" width="30" height="30" /><span>sahay<span>.</span></span></span>
 }
 
+// The store the business actually runs: its own site when one is connected, otherwise the demo storefront.
+function storeAddress(settings: any, widgetKey?: string): string | null {
+  const store = (settings?.integrations || []).find((i: any) => i.kind === 'commerce')?.config || {}
+  const site = settings?.settings?.website_url as string | undefined
+  const withScheme = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`)
+  if (store.provider === 'shopify') return store.primary_domain || (store.shop_domain ? `https://${store.shop_domain}` : site ? withScheme(site) : null)
+  if (store.provider === 'woocommerce' && store.site_url) return withScheme(store.site_url)
+  if (store.provider === 'custom' && site) return withScheme(site)
+  return widgetKey ? `/store/${widgetKey}` : null
+}
+
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 
 // A listbox instead of a native <select>, so the open list matches the dashboard (the OS one can't be styled).
@@ -81,6 +92,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const main = useRef<HTMLElement>(null)
   const { data: ov } = useQuery({ queryKey: ['overview', a.tenant], queryFn: () => api('/v1/overview'), refetchInterval: 4000 })
   const { data: me } = useQuery({ queryKey: ['me', a.tenant], queryFn: () => api('/v1/me') })
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api('/v1/settings') })
+  const storeUrl = storeAddress(settings, me?.widget_key)
   const tenants = me?.tenants || a.tenants || []
   const current = tenants.find((t: any) => t.id === (me?.tenant_id || a.tenant))
   const primary: NavItem[] = [
@@ -134,7 +147,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const sidebar = (mobile = false) => <Sidebar
     primary={primary} groups={groups} pathname={pathname} expandedGroup={expandedGroup}
     onExpand={(id) => setExpandedGroup((previous) => previous === id ? null : id)}
-    widgetKey={me?.widget_key} name={a.user?.name} email={a.user?.email}
+    name={a.user?.name} email={a.user?.email}
     onNavigate={() => dialog.current?.close()}
     closeButton={mobile ? <button type="button" className="dashboard-icon-button" aria-label="Close navigation" onClick={() => dialog.current?.close()}><X size={20} /></button> : undefined}
   />
@@ -148,8 +161,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <span className="dashboard-location-parent">{parentLabel}</span><ChevronRight className="dashboard-location-divider" size={14} aria-hidden="true" />
         <span className="dashboard-location-current">{pageName}</span>
       </div>
-      <WorkspaceSwitcher tenants={tenants} currentId={current?.id}
-        onSelect={(id) => { if (id !== current?.id) { auth.setTenant(id); qc.clear(); nav('/inbox') } }} />
+      <div className="dashboard-workspace-wrap">
+      {tenants.length > 1
+        ? <>
+            <WorkspaceSwitcher tenants={tenants} currentId={current?.id}
+              onSelect={(id) => { if (id !== current?.id) { auth.setTenant(id); qc.clear(); nav('/inbox') } }} />
+            {storeUrl && <a className="dashboard-store-open" href={storeUrl} target="_blank" rel="noreferrer" aria-label="Open your store" title="Open your store"><ArrowUpRight size={16} aria-hidden="true" /></a>}
+          </>
+        : storeUrl
+          // one button: the business name and the arrow together open the store
+          ? <div className="dashboard-workspace"><a className="dashboard-workspace-trigger is-link" href={storeUrl} target="_blank" rel="noreferrer" aria-label={`Open ${current?.name || 'your'} store`} title="Open your store">
+              <Store size={16} aria-hidden="true" /><span className="dashboard-workspace-name">{current?.name}</span><ArrowUpRight size={15} aria-hidden="true" /></a></div>
+          : <div className="dashboard-workspace"><div className="dashboard-workspace-trigger is-static" aria-label={`Business: ${current?.name || ''}`}>
+              <Store size={16} aria-hidden="true" /><span className="dashboard-workspace-name">{current?.name}</span></div></div>}
+      </div>
     </header>
     <main id="dashboard-content" tabIndex={-1} ref={main} className="dashboard-sheet scroll-thin"><div className="dashboard-canvas">{children}</div></main>
     <dialog ref={dialog} className="dashboard-navigation-dialog" aria-label="Navigation" onClose={() => menuButton.current?.focus()} onClick={(event) => { if (event.target === event.currentTarget) dialog.current?.close() }}>
@@ -158,9 +183,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   </div>
 }
 
-function Sidebar({ primary, groups, pathname, expandedGroup, onExpand, widgetKey, name, email, onNavigate, closeButton }: {
+function Sidebar({ primary, groups, pathname, expandedGroup, onExpand, name, email, onNavigate, closeButton }: {
   primary: NavItem[]; groups: NavGroup[]; pathname: string; expandedGroup: string | null; onExpand: (id: string) => void
-  widgetKey?: string; name?: string; email?: string; onNavigate: () => void; closeButton?: ReactNode
+  name?: string; email?: string; onNavigate: () => void; closeButton?: ReactNode
 }) {
   const id = useId()
   const navItem = (item: NavItem, nested = false) => <NavLink key={item.to} to={item.to} onClick={onNavigate}
@@ -187,7 +212,6 @@ function Sidebar({ primary, groups, pathname, expandedGroup, onExpand, widgetKey
       })}</div>
     </nav>
     <div className="dashboard-sidebar-bottom">
-      {widgetKey && <a className="dashboard-store-link" href={`/store/${widgetKey}`} target="_blank" rel="noreferrer"><Store size={16} aria-hidden="true" /><span>Preview store</span><ArrowUpRight size={15} aria-hidden="true" /></a>}
       <div className="dashboard-account">
         <NavLink to="/profile" onClick={onNavigate} className={({ isActive }) => cx('dashboard-account-link', isActive && 'is-active')} aria-label="Open your profile">
           <span className="dashboard-avatar" aria-hidden="true">{name?.split(' ').slice(0, 2).map((part) => part[0]).join('') || 'S'}</span>

@@ -103,10 +103,17 @@
 .dashboard-location-parent { color: var(--dashboard-muted); }
 .dashboard-location-divider { color: var(--dashboard-muted); flex: none; }
 .dashboard-location-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dashboard-ink); }
+.dashboard-workspace-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .dashboard-workspace { position: relative; max-width: 240px; min-width: 0; }
+.dashboard-store-open { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--dashboard-surface); color: var(--dashboard-muted); border: 1px solid transparent; transition: background 150ms, color 150ms; }
+.dashboard-store-open:hover { background: var(--dashboard-field); border-color: var(--dashboard-border); color: var(--dashboard-ink); }
 .dashboard-workspace-trigger { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: var(--dashboard-surface); color: var(--dashboard-ink); font-size: 13px; font-weight: 500; transition: background-color .15s, border-color .15s; }
 .dashboard-workspace-trigger:hover, .dashboard-workspace-trigger[aria-expanded="true"] { background: var(--dashboard-field); border-color: var(--dashboard-border); }
 .dashboard-workspace-trigger > svg { flex: none; color: var(--dashboard-muted); }
+.dashboard-workspace-trigger.is-static { cursor: default; }
+.dashboard-workspace-trigger.is-link { text-decoration: none; cursor: pointer; }
+.dashboard-workspace-trigger.is-link > svg:last-child { margin-left: 2px; }
+.dashboard-workspace-trigger.is-static:hover { background: var(--dashboard-surface); border-color: transparent; }
 .dashboard-workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-workspace-chevron { margin-left: 2px; transition: transform .15s; }
 .dashboard-workspace-chevron.is-open { transform: rotate(180deg); }
