@@ -190,8 +190,8 @@ function Events() {
     <Card title="Events from your site" pad={false}>
       <div className="grid gap-4 p-4 lg:grid-cols-[1fr_1.2fr]">
         <div className="space-y-2 text-xs text-slate-600">
-          <p>Your server tells Sahay what happened: <code>order.placed</code>, <code>order.shipped</code>, <code>order.delivered</code>, <code>order.cancelled</code>, <code>product.updated</code>, <code>customer.updated</code>, <code>cart.updated</code>, <code>exchange.shipped</code>. Shipping updates reach the customer on WhatsApp and join their open ticket. Repeated event ids are ignored.</p>
-          <Code>{example}</Code>
+          <p>Your server tells Sahay what happened: <code>order.placed</code>, <code>order.shipped</code>, <code>order.delivered</code>, <code>order.cancelled</code>, <code>product.updated</code>, <code>customer.updated</code>, <code>cart.updated</code>, <code>exchange.shipped</code>. Shipping updates reach the customer on Telegram and join their open ticket. Repeated event ids are ignored.</p>
+          <CodeBlock title="Example request (curl)">{example}</CodeBlock>
         </div>
         <div>
           {isLoading ? <Spinner /> : !data?.length ? <Empty title="No events yet">Optional (level 2). Shopify and WooCommerce don't need this.</Empty> : (

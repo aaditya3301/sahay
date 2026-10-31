@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Bot, Brain, CheckCircle2, ChevronDown, ChevronRight, FileText, Image as ImageIcon, Mic, Send, ShieldAlert, ShieldCheck, User, Wrench, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Badge, Button, Card, ChannelIcon, channelName, cx, FrustrationBar, inputCls, SentimentChip, Spinner, StatusBadge, UrgencyBadge } from '../components/ui'
+import { Badge, Button, Card, ChannelIcon, channelName, CodeBlock, cx, FrustrationBar, inputCls, SentimentChip, Spinner, StatusBadge, UrgencyBadge } from '../components/ui'
 import { useTicketRef } from '../lib/useTicketRef'
 import { api, mediaUrl } from '../lib/api'
 import { humanize, inr, time } from '../lib/format'
@@ -274,8 +274,7 @@ function ActionRow({ a }: { a: any }) {
 }
 
 function Pre({ label, v }: { label: string; v: any }) {
-  return <div><div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-    <pre className="max-h-48 overflow-auto rounded-md bg-slate-900 p-2 text-[11px] leading-relaxed text-slate-100 scroll-thin">{JSON.stringify(v, null, 2)}</pre></div>
+  return <CodeBlock title={label}>{JSON.stringify(v, null, 2)}</CodeBlock>
 }
 
 function Evidence({ data }: { data: any }) {

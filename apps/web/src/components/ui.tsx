@@ -1,9 +1,26 @@
 import clsx from 'clsx'
-import { AlertTriangle, CheckCircle2, Clock, Globe, Loader2, Mail, MessageCircle, MessagesSquare, Phone, Send, ShieldAlert, UserRound, X, XCircle } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, Copy, Globe, Loader2, Mail, MessagesSquare, Phone, Send, ShieldAlert, UserRound, X, XCircle } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { humanize, sentimentLabel } from '../lib/format'
 
 export const cx = clsx
+
+/** Code, collapsed until opened, with a copy button. Used everywhere a snippet or example is shown. */
+export function CodeBlock({ children, title = 'Show code', defaultOpen = false }: { children: string; title?: string; defaultOpen?: boolean }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(children); setCopied(true); setTimeout(() => setCopied(false), 1800) } catch { /* the text is selectable */ }
+  }
+  return (
+    <details className="code-block" open={defaultOpen}>
+      <summary><span>{title}</span><ChevronDown size={16} aria-hidden="true" /></summary>
+      <div className="code-block-body">
+        <button type="button" className="code-block-copy" onClick={copy} aria-label="Copy code">{copied ? <><Check size={14} aria-hidden="true" />Copied</> : <><Copy size={14} aria-hidden="true" />Copy</>}</button>
+        <pre tabIndex={0}>{children}</pre>
+      </div>
+    </details>
+  )
+}
 
 export function Card({ children, className, title, action, pad = true }: { children: ReactNode; className?: string; title?: ReactNode; action?: ReactNode; pad?: boolean }) {
   return (
