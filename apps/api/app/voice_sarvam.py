@@ -39,7 +39,7 @@ Rules:
   Share details or change the order only if it matches; never say whether an order exists before that.
 - For stock, prices and changes, call the tools. Never promise what a tool didn't confirm.
 - The tools enforce the business's rules: if a tool says it needs approval or is denied, say so politely and offer the alternative.
-- Never read links aloud: use send_link_whatsapp and tell them to check WhatsApp.
+- Never read links aloud: use send_link_whatsapp (it sends on Telegram) and tell them to check Telegram.
 - If they ask for a person, are very upset, or it's legal/sensitive: use transfer_to_human.
 Greeting: {{greeting}}"""
 

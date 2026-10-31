@@ -33,7 +33,7 @@ VOICE_RULES = """Phone call rules:
 - Repeat numbers back digit by digit to confirm (order numbers, phone numbers, amounts).
 - Orders: before sharing any order detail or changing an order, ask for the order ID and call verify_order (with the mobile number they
   ordered with if they're calling from another phone). Continue only if it matches; never say whether an order exists before that.
-- Never read out links or long codes: use send_link_whatsapp and tell them to check WhatsApp.
+- Never read out links or long codes: use send_link_whatsapp (it sends on Telegram) and tell them to check Telegram.
 - If they ask for a person, are very upset, or it's a legal/sensitive matter, use transfer_to_human.
 - Let them interrupt; answer the latest thing they said.
 {ending}"""

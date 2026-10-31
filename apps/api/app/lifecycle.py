@@ -42,7 +42,7 @@ async def _customer_conv(db, name: str | None, phone: str | None, email: str | N
 
     cust = await resolve_customer(db, InboundMessage(channel=channel, from_phone=phone, from_email=email, from_name=name, verified=True))
     thread = None
-    if channel == "whatsapp":
+    if channel in ("whatsapp", "telegram"):  # phone-based customers reach us on Telegram once they have started the bot
         thread = await db.val("SELECT value FROM customer_identities WHERE customer_id=:c AND kind='telegram' LIMIT 1", c=cust["id"])
         if thread:
             channel = "telegram"
@@ -67,7 +67,7 @@ class Short(BaseModel):
 async def _write(tenant_id: str, srow: dict, instruction: str, facts: dict) -> str:
     out = await llm.structured(
         Short, model=settings.model_composer, purpose="proactive", tenant_id=tenant_id, thinking=settings.thinking_composer or None,
-        system=f"You write short WhatsApp messages for {srow['name']}. Voice: {srow['brand_voice']}. Hinglish if the brand uses it. "
+        system=f"You write short Telegram messages for {srow['name']}. Voice: {srow['brand_voice']}. Hinglish if the brand uses it. "
                "Max 3 lines. Only use the facts given. No links.",
         contents=f"{instruction}\nFacts: {json.dumps(facts, default=str)}")
     return out.text.strip()
@@ -99,7 +99,7 @@ async def run_lifecycle(tenant_id: str) -> dict:
         async with tenant_session(tenant_id) as db:
             if not await _claim(db, "delay_alert", o["order_ref"], summary=f"Delay alert for #{o['order_ref']}"):
                 continue
-            cust, conv = await _customer_conv(db, o["customer_name"], o["customer_phone"], o["customer_email"], "whatsapp")
+            cust, conv = await _customer_conv(db, o["customer_name"], o["customer_phone"], o["customer_email"], "telegram")
             days = (date.today() - o["expected_delivery"]).days
             text = await _write(tenant_id, srow, "Tell the customer, before they ask, that their parcel is running late, say sorry once, "
                                 "and that we're tracking it with the courier and will update them. Offer help by replying here.",
@@ -115,7 +115,7 @@ async def run_lifecycle(tenant_id: str) -> dict:
         async with tenant_session(tenant_id) as db:
             if not await _claim(db, "cod_confirm", o["order_ref"], summary=f"COD confirmation for #{o['order_ref']} ({inr(o['total_paise'])})"):
                 continue
-            cust, conv = await _customer_conv(db, o["customer_name"], o["customer_phone"], o["customer_email"], "whatsapp")
+            cust, conv = await _customer_conv(db, o["customer_name"], o["customer_phone"], o["customer_email"], "telegram")
             text = (f"Namaste {(o['customer_name'] or '').split(' ')[0]} ji 🙏 {srow['name']} se. Aapka COD order #{o['order_ref']} "
                     f"({inr(o['total_paise'])}) ship hone wala hai. Confirm karne ke liye 'Confirm' reply karein, ya 'Cancel' agar nahi chahiye.")
             msg = await send_to_customer(db, conv, text, None, "ai", "COD confirmation",
@@ -294,7 +294,7 @@ async def send_campaign(tenant_id: str, campaign_id: str) -> None:
     for r in aud["eligible"][:500]:
         async with tenant_session(tenant_id) as db:
             cust, conv = await _customer_conv(db, r["customer_name"], r["customer_phone"], r["customer_email"],
-                                              "email" if c["channel"] == "email" else "whatsapp")
+                                              "email" if c["channel"] == "email" else "telegram")
             text = c["message"].replace("{first_name}", (r["customer_name"] or "there").split(" ")[0])
             if c["channel"] == "email":
                 text += f"\n\n—\nDon't want these emails? Unsubscribe: {unsubscribe_url(tenant_id, str(cust['id']))}"
@@ -355,7 +355,7 @@ async def remind_carts(tenant_id: str, srow: dict, after_hours: float) -> int:
                 continue
             if not await _claim(db, "cart_reminder", str(cart["id"]), summary=f"Cart reminder · {inr(cart['total_paise'])}"):
                 continue
-            channel = "whatsapp" if cart["customer_phone"] else "email"
+            channel = "telegram" if cart["customer_phone"] else "email"
             cust, conv = await _customer_conv(db, cart["customer_name"], cart["customer_phone"], cart["customer_email"], channel)
             skip = "opted out" if cust.get("marketing_opt_out") else await _angry(db, cust["id"])
             if skip:

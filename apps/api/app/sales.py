@@ -184,18 +184,27 @@ async def run_tool(ctx, name: str, args: dict) -> dict:
         phone = ctx.customer.get("primary_phone")
         if not phone:
             return {"ok": False, "note": "No phone number on file; ask where to send it."}
+        from app import telegram
         from app.channels import integration, wa_send
 
-        cfg = await integration(db, "whatsapp")
         status = "simulated"
-        if cfg.get("access_token") and cfg.get("phone_number_id"):
+        chat_id = await db.val("SELECT value FROM customer_identities WHERE customer_id=:c AND kind='telegram' LIMIT 1", c=ctx.customer["id"])
+        if chat_id and telegram.enabled():
             try:
-                await wa_send(cfg, phone, {"type": "text", "text": {"body": args.get("text", "")[:4096]}})
+                await telegram.send_text(chat_id, args.get("text", ""))
                 status = "sent"
             except Exception:
                 status = "failed"
-        await audit(db, "ai", "Sahay AI", "voice.whatsapp_link", "customer", ctx.customer["id"], {"text": args.get("text"), "status": status})
-        note = "Sent on WhatsApp. Tell them to check WhatsApp."
+        else:  # no Telegram chat yet: use WhatsApp only if the business connected it
+            cfg = await integration(db, "whatsapp")
+            if cfg.get("access_token") and cfg.get("phone_number_id"):
+                try:
+                    await wa_send(cfg, phone, {"type": "text", "text": {"body": args.get("text", "")[:4096]}})
+                    status = "sent"
+                except Exception:
+                    status = "failed"
+        await audit(db, "ai", "Sahay AI", "voice.telegram_link", "customer", ctx.customer["id"], {"text": args.get("text"), "status": status})
+        note = "Sent on Telegram. Tell them to check Telegram." if status == "sent" else "Queued for Telegram. They haven't started the bot yet, so also say the key detail aloud."
         if removed:
             note += f" (Removed {len(removed)} link(s) that weren't from real data; never invent URLs.)"
         return {"ok": status != "failed", "status": status, "note": note}

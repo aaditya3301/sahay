@@ -104,7 +104,7 @@ async def _notify(db, order: dict, text: str, kind: str) -> dict:
 
     if not (order.get("customer_phone") or order.get("customer_email")):
         return {"notified": False, "reason": "no contact on the order"}
-    channel = "whatsapp" if order.get("customer_phone") else "email"
+    channel = "telegram" if order.get("customer_phone") else "email"
     cust, conv = await _customer_conv(db, order.get("customer_name"), order.get("customer_phone"), order.get("customer_email"), channel)
     ticket = await db.one("SELECT id, number FROM tickets WHERE customer_id=:c AND :r = ANY(order_refs) AND status NOT IN ('closed') "
                           "ORDER BY updated_at DESC LIMIT 1", c=cust["id"], r=order["order_ref"]) or await db.one(
@@ -230,7 +230,7 @@ async def create_ticket(body: ApiTicket, authorization: str | None = Header(None
     if not (c.email or c.phone):
         raise HTTPException(400, "customer.email or customer.phone is required so we can reply")
     text = "\n".join(x for x in [f"Subject: {body.subject}" if body.subject else "", body.message, f"Order: #{body.order_ref}" if body.order_ref else ""] if x)
-    m = await ingest(tid, InboundMessage(channel="email" if c.email else "whatsapp", text=text, from_email=c.email, from_phone=c.phone,
+    m = await ingest(tid, InboundMessage(channel="email" if c.email else "telegram", text=text, from_email=c.email, from_phone=c.phone,
                                          from_name=c.name, subject=body.subject, verified=True))
     if c.external_id and m:
         async with tenant_session(tid) as db:

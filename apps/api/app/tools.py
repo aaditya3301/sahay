@@ -103,7 +103,7 @@ TOOL_SPECS: dict[str, dict] = {
     "request_verification": {"kind": "read", "description": "Show the visitor a phone OTP form in the chat. Use when an unverified web visitor asks about their orders.",
                              "parameters": _obj({})},
     # voice-only tools
-    "send_link_whatsapp": {"kind": "voice", "description": "Send details to the caller on WhatsApp instead of reading them aloud (order number, courier + AWB, a link that appeared in a tool or knowledge result). Never make up a URL.",
+    "send_link_whatsapp": {"kind": "voice", "description": "Send details to the caller on Telegram instead of reading them aloud (order number, courier + AWB, a link that appeared in a tool or knowledge result). Never make up a URL.",
                            "parameters": _obj({"text": S}, ["text"])},
     "transfer_to_human": {"kind": "voice", "description": "Warm-transfer the call to a human with a one-line summary.",
                           "parameters": _obj({"summary": S}, ["summary"])},

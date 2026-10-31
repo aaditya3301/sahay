@@ -304,7 +304,7 @@ async def campaigns(ctx: Ctx = CtxDep):
 class CampaignNew(BaseModel):
     name: str
     goal: str
-    channel: str = "whatsapp"
+    channel: str = "telegram"
     audience: dict = {"segment": "recent_buyers"}
 
 
@@ -312,7 +312,7 @@ class CampaignNew(BaseModel):
 async def campaign_new(body: CampaignNew, ctx: Ctx = CtxDep):
     async with tenant_session(ctx.tenant_id) as db:
         c = await db.one("INSERT INTO campaigns (tenant_id, name, goal, channel, audience) VALUES (:t,:n,:g,:ch,:a) RETURNING *",
-                         t=ctx.tenant_id, n=body.name, g=body.goal, ch=body.channel if body.channel in ("whatsapp", "email") else "whatsapp", a=body.audience)
+                         t=ctx.tenant_id, n=body.name, g=body.goal, ch=body.channel if body.channel in ("telegram", "email") else "telegram", a=body.audience)
     await lifecycle.draft_campaign(ctx.tenant_id, str(c["id"]))
     async with tenant_session(ctx.tenant_id) as db:
         return jsonable(await db.one("SELECT * FROM campaigns WHERE id=:id", id=c["id"]))
