@@ -149,7 +149,7 @@
 <h2 id="model">How it fits together</h2>
 <p><strong>Tickets and conversations live in Sahay. Orders, products and customers live with you.</strong> Connectors join the two.</p>
 <ul>
-  <li>Every message (widget, WhatsApp, email, phone, your contact form) becomes a conversation in Sahay. Support issues become tickets (numbered per business, like <code>LL-1042</code>); buying chats become leads.</li>
+  <li>Every message (widget, Telegram, email, phone, your contact form) becomes a conversation in Sahay. Support issues become tickets (numbered per business, like <code>LL-1042</code>); buying chats become leads.</li>
   <li>When the AI needs facts or actions it calls one fixed list of actions, the <a href="#contract">Commerce Contract</a>. Shopify, WooCommerce and custom sites each have an adapter, so the AI never cares which platform is behind it.</li>
   <li>The AI proposes, your rules decide: every action (refund, return, cancel) passes Sahay's policy check before your endpoint is called.</li>
 </ul>
@@ -164,14 +164,16 @@
 <h2 id="keys">Keys &amp; security</h2>
 <table>
   <tr><th>Key</th><th>Where</th><th>Used for</th></tr>
-  <tr><td><code>pk_…</code> site key</td><td>Browser (public)</td><td>Loads the widget. Works only on the domains you allow in Agent Studio → Website widget.</td></tr>
-  <tr><td><code>sk_…</code> secret key</td><td>Your server only</td><td>Signing customers, sending events, the REST API, verifying our calls to your endpoint. Rotate it in Agent Studio.</td></tr>
+  <tr><td><code>pk_…</code> site key</td><td>Browser (public)</td><td>Loads the widget. Find yours in the dashboard under <strong>Workspace → Developer docs → Keys for your developer</strong>.</td></tr>
+  <tr><td><code>sk_…</code> secret key</td><td>Your server only</td><td>Signing customers, sending events, the REST API, verifying our calls to your endpoint. Keep it private.</td></tr>
   <tr><td><code>whsec_…</code></td><td>Your webhook receiver</td><td>Verifying webhooks we send you.</td></tr>
 </table>
 <p>Requests between our servers and yours are signed and timestamped: <code>X-Sahay-Timestamp</code> and <code>X-Sahay-Signature: sha256=HMAC_SHA256(secret, "&lt;timestamp&gt;.&lt;raw body&gt;")</code>. Reject anything older than 5 minutes. Events carry an <code>id</code>; sending the same id twice is ignored. Store credentials (Shopify, WooCommerce, Sarvam tokens) are encrypted at rest.</p>
 
-<h2 id="widget">Level 1 · Website widget</h2>
-<div class="tabs" data-group="w"><button class="on">Script tag</button><button>npm</button><button>React</button></div>
+<h2 id="widget">Level 1 · Install on your website</h2>
+<p>Add the Sahay chat to your site with one of the options below. It takes about five minutes and needs no server work.</p>
+<div class="note"><strong>Your site key.</strong> Every business has its own site key (it starts with <code>pk_</code>). Developers: copy it from the dashboard under <strong>Workspace → Developer docs → Keys for your developer</strong> (see <a href="#keys">Keys &amp; security</a>), and use it in place of <code>pk_yourbrand_xxx</code> in the examples below. The site key is public, so it is safe to put in your page.</div>
+<div class="tabs" data-group="w"><button class="on">Script tag</button><button>npm</button><button>React</button><button>Shopify</button><button>WordPress</button></div>
 <div class="tab on" data-group="w"><pre><code>&lt;script src="https://sahay-536440059442.asia-south1.run.app/widget.js" data-site-key="pk_yourbrand_xxx" async&gt;&lt;/script&gt;</code></pre></div>
 <div class="tab" data-group="w"><pre><code>npm i @sahay/widget
 
@@ -181,6 +183,14 @@ setContext({ productSku: 'SKU-123', productTitle: 'Runner 9' })   // what the vi
 cart({ items: [{ sku: 'SKU-123', qty: 1 }], phone: '9876543210' })   // abandoned-cart reminders</code></pre></div>
 <div class="tab" data-group="w"><pre><code>import { SahayChat } from '@sahay/widget/react'
 &lt;SahayChat siteKey="pk_yourbrand_xxx" context={{ productSku: product.sku }} /&gt;</code></pre></div>
+<div class="tab" data-group="w"><pre><code>1. Install the Sahay app embed (integrations/shopify) on your store.
+2. Online Store → Themes → Customize → App embeds → turn on "Sahay chat".
+3. Paste your site key (from Workspace → Developer docs → Keys for your developer).
+4. (Optional) paste your secret key so logged-in customers are recognised automatically.
+The embed passes the product being viewed and the cart as page context.</code></pre></div>
+<div class="tab" data-group="w"><pre><code>1. Upload integrations/wordpress/sahay-chat.php to wp-content/plugins/ and activate "Sahay Chat".
+2. Settings → Sahay Chat: paste your site key (from Workspace → Developer docs → Keys for your developer) and your secret key.
+3. Logged-in WooCommerce customers are signed automatically; product pages pass the SKU as context.</code></pre></div>
 <p>The chat runs in an iframe, so your CSS can't break it. Visitors can also tap the mic for a voice conversation in the browser. Every new chat passes an invisible bot check, and daily message caps protect your AI spend.</p>
 
 <h2 id="identify">Level 2 · Identify logged-in customers</h2>
@@ -213,7 +223,7 @@ Authorization: Bearer sk_...
 <table>
   <tr><th>Type</th><th>Effect</th></tr>
   <tr><td><code>order.created</code> · <code>order.placed</code> · <code>order.updated</code> · <code>order.paid</code></td><td>Order saved so the AI can answer "where is my order" without your endpoint</td></tr>
-  <tr><td><code>order.shipped</code></td><td>Saved + the customer gets a WhatsApp with courier and tracking; joins any open ticket about that order</td></tr>
+  <tr><td><code>order.shipped</code></td><td>Saved + the customer gets a Telegram message with courier and tracking; joins any open ticket about that order</td></tr>
   <tr><td><code>order.delivered</code> · <code>order.cancelled</code></td><td>Status updated; if a ticket is open for it, the customer is told</td></tr>
   <tr><td><code>return.created</code> · <code>return.shipped</code> · <code>exchange.shipped</code></td><td>Pickup / replacement update sent and added to the ticket</td></tr>
   <tr><td><code>product.created</code> · <code>product.updated</code> · <code>product.deleted</code></td><td>Catalogue for product search and live price/stock answers</td></tr>
@@ -279,7 +289,7 @@ $sahay-&gt;handle([
 <h2 id="rest">REST API (your site → Sahay)</h2>
 <table>
   <tr><th>Call</th><th>What it does</th></tr>
-  <tr><td><code>POST /v1/api/tickets</code></td><td>Create a ticket from your contact form: <code>{ customer: { name, email, phone, external_id }, subject, message, order_ref }</code>. The AI triages and replies by email/WhatsApp.</td></tr>
+  <tr><td><code>POST /v1/api/tickets</code></td><td>Create a ticket from your contact form: <code>{ customer: { name, email, phone, external_id }, subject, message, order_ref }</code>. The AI triages and replies by email/Telegram.</td></tr>
   <tr><td><code>GET /v1/api/tickets?email=…</code> · <code>?phone=…</code> · <code>?ref=LL-1042</code></td><td>A customer's tickets with status (for your "My requests" page)</td></tr>
   <tr><td><code>POST /v1/api/leads</code></td><td>Create a sales lead: <code>{ name, email, phone, company, interest, notes }</code> (scored automatically)</td></tr>
   <tr><td><code>POST /v1/api/events</code></td><td>See <a href="#events">events</a></td></tr>
@@ -307,7 +317,7 @@ Sahay.verifyWebhook(rawBody, req.headers, process.env.SAHAY_WEBHOOK_SECRET)</cod
 <p>Sarvam rents the phone number and does the listening and speaking (Hindi, Hinglish and 10 more Indian languages); Sahay stays the brain. Setup is one time per business in <strong>Agent Studio → Voice agent</strong>, which gives you the prompt, the on-start hook, one cURL per tool and the webhook URL to paste into Sarvam.</p>
 <ol>
   <li><strong>Before hello</strong>: Sarvam's on-start hook calls <code>/v1/voice/sarvam/start</code>; we find the business and the caller and return their name, orders and open tickets as agent variables.</li>
-  <li><strong>During the call</strong>: Sarvam calls our tools (<code>/v1/voice/sarvam/tools/get_order</code>, <code>…/create_return</code>, <code>…/send_link_whatsapp</code>, <code>…/transfer_to_human</code>). Same rules as chat; each tool returns one short line to speak.</li>
+  <li><strong>During the call</strong>: Sarvam calls our tools (<code>/v1/voice/sarvam/tools/get_order</code>, <code>…/create_return</code>, <code>…/send_link_whatsapp</code> (sends on Telegram), <code>…/transfer_to_human</code>). Same rules as chat; each tool returns one short line to speak.</li>
   <li><strong>After</strong>: the call webhook sends the transcript; it lands on the customer's timeline and updates the ticket.</li>
   <li><strong>Outbound</strong>: COD confirmations and callbacks are dialed through Sarvam's outbound API.</li>
 </ol>
@@ -315,7 +325,7 @@ Sahay.verifyWebhook(rawBody, req.headers, process.env.SAHAY_WEBHOOK_SECRET)</cod
 
 <h2 id="tickets">How tickets work</h2>
 <ul>
-  <li>One customer record per business, matched by email, phone or your customer id: a WhatsApp, an email and a call from the same person land on the same customer.</li>
+  <li>One customer record per business, matched by email, phone or your customer id: a Telegram chat, an email and a call from the same person land on the same customer.</li>
   <li>A new message about the same order while a ticket is open joins that ticket. A reply within 7 days of resolution reopens it.</li>
   <li>States: open → AI working → resolved by AI · waiting on customer · pending approval · escalated → resolved → closed. Each ticket keeps intent, urgency, sentiment, linked orders, SLA timer and a full log of every AI step.</li>
   <li>Using Freshdesk/Zendesk? Subscribe a webhook to <code>ticket.*</code> to mirror tickets there.</li>
@@ -324,7 +334,7 @@ Sahay.verifyWebhook(rawBody, req.headers, process.env.SAHAY_WEBHOOK_SECRET)</cod
 <h2 id="testing">Testing</h2>
 <ul>
   <li><strong>Sandbox:</strong> every workspace starts on the demo store (fake orders and products), so you can test the widget, events and tools before connecting your real store.</li>
-  <li><strong>Integration Health</strong> (dashboard → Integrations) shows green/amber/red for widget, store, events, webhooks, WhatsApp, email, voice and automations.</li>
+  <li><strong>Integration Health</strong> (dashboard → Integrations) shows green/amber/red for widget, store, events, webhooks, Telegram, email, voice and automations.</li>
   <li><strong>Webhook tester:</strong> "Send test" on any webhook endpoint shows the status code we got back.</li>
   <li><strong>Customer simulator</strong> and <strong>AI mystery shoppers</strong> test the agent end to end.</li>
 </ul>

@@ -78,7 +78,7 @@ function Protected() {
         <Route path="/learning" element={<Learning />} />
         <Route path="/security" element={<Security />} />
         <Route path="/integrations" element={<Integrations />} />
-        <Route path="/developer" element={<Integrations />} />
+        <Route path="/developer" element={<DeveloperDocs />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/inbox" replace />} />

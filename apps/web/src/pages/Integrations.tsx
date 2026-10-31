@@ -50,37 +50,16 @@ export default function Integrations() {
   )
 }
 
-export default function Integrations() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [view, setView] = useState(location.pathname === '/developer' ? 'developer' : 'connect')
-  const isDeveloperPage = location.pathname === '/developer'
-  const activeView = isDeveloperPage ? 'developer' : view
-  const { data } = useQuery({ queryKey: ['settings'], queryFn: () => api('/v1/settings') })
-  const changeView = (next: string) => {
-    if (next === 'developer') navigate('/developer')
-    else {
-      setView(next)
-      if (isDeveloperPage) navigate('/integrations')
-    }
-  }
+export function DeveloperDocs() {
   return (
     <>
-      <PageHeader title={isDeveloperPage ? 'Developer docs' : 'Integrations'} subtitle={isDeveloperPage ? 'A clear setup guide for your website, widget, and developer.' : 'Start with your store, then choose how customers reach you.'} />
-      <Tabs value={activeView} onChange={changeView} tabs={[{ id: 'connect', label: 'Set up connections' }, { id: 'health', label: 'Connection status' }, { id: 'developer', label: 'Developer docs' }]} />
-      <section hidden={activeView !== 'connect'} className="setup-tab-content" aria-label="Set up connections">
-        <div className="integrations-connect-layout">
-          <Store />
-          {data ? <ChannelConnections integrations={data.integrations} showOtherChannels platformEmail={data.platform_email} /> : <Spinner />}
-        </div>
-      </section>
-      <section hidden={activeView !== 'health'} className="setup-tab-content" aria-label="Connection status"><Health onConnect={() => setView('connect')} /></section>
-      <section hidden={activeView !== 'developer'} className="setup-tab-content" aria-label="Developer tools">
+      <PageHeader title="Developer docs" subtitle="A clear setup guide for your website, widget, and developer." />
+      <section className="setup-tab-content" aria-label="Developer tools">
         <p className="setup-intro">Choose what you are connecting. You can share this page with your developer; regular store connections are under Integrations.</p>
         <div className="developer-start-grid">
-          <Link className="developer-start-card" to="/studio?tab=widget"><span className="developer-start-icon"><MessageCircle size={16} /></span><span><strong>Website chat widget</strong><small>Add Sahay chat to your website. No server work needed.</small></span><span aria-hidden="true">→</span></Link>
-          <details className="developer-start-card developer-start-details"><summary><span className="developer-start-icon"><PackageCheck size={16} /></span><span><strong>Store updates</strong><small>Send order and product changes from your website.</small></span><span aria-hidden="true">⌄</span></summary><div className="developer-start-links"><a href="/docs#levels" target="_blank" rel="noreferrer">Read setup guide <ExternalLink size={14} /></a><a href="/api-docs" target="_blank" rel="noreferrer">API reference <ExternalLink size={14} /></a></div></details>
-          <details className="developer-start-card developer-start-details"><summary><span className="developer-start-icon"><Send size={16} /></span><span><strong>Send events to your systems</strong><small>Forward ticket and lead updates to a CRM or backend.</small></span><span aria-hidden="true">⌄</span></summary><div className="developer-start-links"><a href="/docs" target="_blank" rel="noreferrer">Webhook guide <ExternalLink size={14} /></a><a href="/api-docs" target="_blank" rel="noreferrer">API reference <ExternalLink size={14} /></a></div></details>
+          <a className="developer-start-card" href="/docs#widget" target="_blank" rel="noreferrer"><span className="developer-start-icon"><MessageCircle size={16} /></span><span><strong>Website chat widget</strong><small>Add Sahay chat to your website. No server work needed.</small></span><span aria-hidden="true">→</span></a>
+          <div className="developer-start-card developer-start-details"><div className="developer-start-head"><span className="developer-start-icon"><PackageCheck size={16} /></span><span><strong>Store updates</strong><small>Send order and product changes from your website.</small></span></div><div className="developer-start-links"><a href="/docs#events" target="_blank" rel="noreferrer">Read setup guide <ExternalLink size={14} /></a><a href="/api-docs" target="_blank" rel="noreferrer">API reference <ExternalLink size={14} /></a></div></div>
+          <div className="developer-start-card developer-start-details"><div className="developer-start-head"><span className="developer-start-icon"><Send size={16} /></span><span><strong>Send events to your systems</strong><small>Forward ticket and lead updates to a CRM or backend.</small></span></div><div className="developer-start-links"><a href="/docs#webhooks" target="_blank" rel="noreferrer">Webhook guide <ExternalLink size={14} /></a><a href="/api-docs" target="_blank" rel="noreferrer">API reference <ExternalLink size={14} /></a></div></div>
         </div>
         <div className="setup-developer-sections">
           <details className="connection-disclosure"><summary>Keys for your developer</summary><div><Keys /></div></details>
@@ -227,8 +206,8 @@ export function StoreConnect({ hideDemo = false, onSaved, form }: { hideDemo?: b
         )}
         {tab === 'custom' && (
           <>
-            <p className="text-slate-600">Start by adding website chat. Your developer can connect live order updates and order actions later.</p>
-            <Link className="setup-text-link" to="/studio?tab=widget">Set up website chat →</Link>
+            <p className="text-slate-600">Your developer can connect your website by following the developer docs. They cover adding the chat, sending order updates and connecting order actions. The site key they need is in Workspace → Developer docs → Keys for your developer.</p>
+            <a className="setup-text-link" href="/docs#levels" target="_blank" rel="noreferrer">Read the developer docs →</a>
             <details className="dashboard-disclosure"><summary>Advanced: connect order actions</summary><div className="space-y-3"><Field label="Order actions address (optional)" hint="Your developer supplies this address. Leave blank to start with chat and order updates.">
               {input('endpoint_url', 'https://yoursite.in/sahay')}
             </Field>
@@ -276,7 +255,7 @@ function Keys() {
             </div>
             {reveal.isError && <div className="text-xs text-red-600">{(reveal.error as Error).message}</div>}
           </div>
-          <p className="text-xs text-slate-500">Rotate the secret key in Agent Studio → Website widget. Never put the secret key in browser code.</p>
+          <p className="text-xs text-slate-500">Never put the secret key in browser code.</p>
         </div>
       )}
     </Card>

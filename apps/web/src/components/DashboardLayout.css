@@ -462,13 +462,11 @@
 .developer-start-card { display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--dashboard-border); border-radius: 14px; color: var(--dashboard-ink); background: var(--dashboard-surface); text-decoration: none; }
 .developer-start-card:hover { border-color: #aebec4; background: var(--dashboard-field); }
 .developer-start-icon { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--dashboard-active); color: var(--dashboard-blue); }
-.developer-start-card > span:nth-child(2), .developer-start-details summary > span:nth-child(2) { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.developer-start-card > span:nth-child(2), .developer-start-head > span:nth-child(2) { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .developer-start-card strong { font-size: 14px; font-weight: 600; }
 .developer-start-card small { color: var(--dashboard-muted); font-size: 12px; line-height: 1.5; }
 .developer-start-details { display: block; }
-.developer-start-details > summary { display: flex; align-items: flex-start; gap: 12px; list-style: none; cursor: pointer; }
-.developer-start-details > summary::-webkit-details-marker { display: none; }
-.developer-start-details > summary > span:last-child { color: var(--dashboard-blue); }
+.developer-start-head { display: flex; align-items: flex-start; gap: 12px; }
 .developer-start-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0 0 42px; }
 .developer-start-links a { display: inline-flex; align-items: center; gap: 5px; color: var(--dashboard-blue); font-size: 12px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 
