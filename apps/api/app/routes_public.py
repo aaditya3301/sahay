@@ -295,6 +295,26 @@ async def email_webhook(request: Request):
     return {"ok": True, "ingested": done}
 
 
+async def _outreach_event(db, message_id: str, status: str, ev: dict) -> None:
+    """A sales email's delivery shows on the lead's timeline once each: delivered, first open, bounced."""
+    from app.sales import add_event
+
+    em = await db.one("SELECT id, lead_id, subject FROM outreach_emails WHERE external_id=:m", m=message_id)
+    kind = {"delivered": "email_delivered", "read": "email_opened", "failed": "email_bounced"}.get(status)
+    if not em or not kind:
+        return
+    if await db.val("SELECT 1 FROM lead_events WHERE lead_id=:l AND kind=:k AND data->>'email_id'=:e", l=em["lead_id"], k=kind, e=str(em["id"])):
+        return
+    reason = ev.get("reason") or ev.get("event")
+    text = {"email_delivered": f"Email '{em['subject']}' delivered", "email_opened": f"Opened '{em['subject']}'",
+            "email_bounced": f"Email '{em['subject']}' bounced ({reason})"}[kind]
+    await add_event(db, em["lead_id"], kind, text, {"email_id": str(em["id"]), "event": ev.get("event")})
+    if kind == "email_bounced" and ev.get("event") in ("hardBounce", "invalid", "blocked"):
+        # a dead address: stop the follow-ups and ask the owner for another contact
+        await db.exec("UPDATE leads SET email_status='invalid', next_action='Find another email or phone', next_action_at=NULL, "
+                      "updated_at=now() WHERE id=:l", l=em["lead_id"])
+
+
 # Brevo transactional events → the message's delivery status (bounces show as failed on the ticket)
 EMAIL_EVENT_STATUS = {"delivered": "delivered", "opened": "read", "uniqueOpened": "read", "click": "read", "hardBounce": "failed",
                       "softBounce": "deferred", "deferred": "deferred", "blocked": "failed", "invalid": "failed", "spam": "spam"}
@@ -319,6 +339,7 @@ async def email_events(request: Request):
         async with tenant_session(tid) as db:
             await db.exec("UPDATE messages SET status=:s WHERE channel='email' AND external_id=:m AND status NOT IN ('read','failed')", s=st, m=mid)
             await db.exec("UPDATE outreach_emails SET status=CASE WHEN :s='failed' THEN 'bounced' ELSE status END WHERE external_id=:m", s=st, m=mid)
+            await _outreach_event(db, mid, st, ev)
         if st == "failed":
             log.warning("email %s to %s: %s %s", mid, ev.get("email"), ev.get("event"), ev.get("reason", ""))
     return {"ok": True}
