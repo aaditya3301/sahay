@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { ArrowRight, Check, Copy, MessageCircle, Package, ShoppingBag, X } from 'lucide-react'
+import { ArrowRight, Check, Copy, LogOut, MessageCircle, Package, ShoppingBag, User, X } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import './StoreDemo.css'
 
@@ -37,6 +37,19 @@ function loadCashfree(): Promise<any> {
     document.head.appendChild(s)
   })
 }
+// A shopper's account on this store. The session is kept in this browser for a month, so they log in once, not every visit.
+type Shopper = { name: string; email: string; phone: string }
+type Session = { token: string; shopper: Shopper; chat?: { user: Shopper; userHash: string } }  // chat: the shopper, signed, for the chat widget
+const sessionKey = (key: string) => `sahay.shopper.${key}`
+const loadSession = (key: string): Session | null => { try { return JSON.parse(localStorage.getItem(sessionKey(key)) || 'null') } catch { return null } }
+const saveSession = (key: string, s: Session) => { try { localStorage.setItem(sessionKey(key), JSON.stringify(s)) } catch { /* private mode: they just log in again next time */ } }
+const clearSession = (key: string) => { try { localStorage.removeItem(sessionKey(key)) } catch { /* nothing to clear */ } }
+const shopperCall = async (path: string, body: any) => {
+  const r = await fetch(`/v1/widget/shopper/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const d = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(d.detail || 'Something went wrong. Please try again.')
+  return d
+}
 const money = (amount: number) => `₹${amount.toLocaleString('en-IN')}`
 
 // Demo commerce stays on the existing widget API: product context, cart reporting and checkout.
@@ -49,6 +62,15 @@ export default function StoreDemo() {
   const [cart, setCart] = useState<Record<string, number>>({})
   const [checkout, setCheckout] = useState(false)
   const [contact, setContact] = useState({ name: '', phone: '', email: '' })
+  const [session, setSession] = useState<Session | null>(() => (key ? loadSession(key) : null))
+  const shopper = session?.shopper || null
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'signup' | 'login'>('signup')
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '', phone: '' })
+  const [authError, setAuthError] = useState('')
+  const [authBusy, setAuthBusy] = useState(false)
+  const afterLogin = useRef<((who?: { name: string; phone: string; email: string }) => void) | null>(null)
+  const authDialog = useRef<HTMLDialogElement>(null)
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState('')
   const [placed, setPlaced] = useState<Placed | null>(null)
@@ -82,6 +104,27 @@ export default function StoreDemo() {
       })
       .catch((e) => setPayError(e.message))
   }, [key])
+
+  useEffect(() => {
+    if (!key || !session) return
+    fetch(`/v1/widget/shopper/me?key=${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(async (r) => {
+        if (r.status === 401) { clearSession(key); setSession(null); return }
+        if (r.ok) { const d = await r.json(); const merged = { ...session, shopper: d.shopper, chat: d.chat }; saveSession(key, merged); setSession(merged) }
+      })
+      .catch(() => { /* offline: keep the remembered session */ })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  useEffect(() => {
+    if (shopper) setContact({ name: shopper.name, phone: shopper.phone, email: shopper.email })
+  }, [shopper])
+
+  useEffect(() => {
+    const dialog = authDialog.current
+    if (authOpen && dialog && !dialog.open) dialog.showModal()
+    else if (!authOpen && dialog?.open) dialog.close()
+  }, [authOpen])
 
   useEffect(() => {
     const dialog = placedDialog.current
@@ -172,7 +215,27 @@ export default function StoreDemo() {
     S()?.('cart', { items: list, name: who.name || undefined, phone: who.phone || undefined })
     S()?.('setContext', { cart: list })
   }
-  const add = (p: Product) => { const next = { ...cart, [p.sku]: (cart[p.sku] || 0) + 1 }; setCart(next); report(next) }
+  const addToCart = (p: Product, who?: { name: string; phone: string; email: string }) => { const next = { ...cart, [p.sku]: (cart[p.sku] || 0) + 1 }; setCart(next); report(next, who || contact) }
+  // Browsing is open to everyone; adding to the cart and checking out need an account.
+  const needLogin = (then?: (who?: { name: string; phone: string; email: string }) => void) => {
+    if (session) { then?.(); return }
+    afterLogin.current = then || null; setAuthError(''); setAuthOpen(true)
+  }
+  const add = (p: Product) => needLogin((who) => addToCart(p, who))
+  const openCart = () => needLogin(() => setCheckout(true))
+  const submitAuth = async () => {
+    setAuthError(''); setAuthBusy(true)
+    try {
+      const d = authMode === 'signup'
+        ? await shopperCall('signup', { key, ...authForm })
+        : await shopperCall('login', { key, email: authForm.email, password: authForm.password })
+      const next: Session = { token: d.token, shopper: d.shopper, chat: d.chat }
+      saveSession(key!, next); setSession(next); setAuthOpen(false); setAuthForm({ name: '', email: '', password: '', phone: '' })
+      const todo = afterLogin.current; afterLogin.current = null
+      todo?.({ name: d.shopper.name, phone: d.shopper.phone, email: d.shopper.email })
+    } catch (e: any) { setAuthError(e.message || String(e)) } finally { setAuthBusy(false) }
+  }
+  const logOut = () => { if (key) clearSession(key); setSession(null); setCart({}); setContact({ name: '', phone: '', email: '' }); S()?.('cart', { items: [] }) }
   const pay = async () => {
     setPayError(''); setPaying(true)
     report(cart)
@@ -211,7 +274,19 @@ export default function StoreDemo() {
           <button className="store-nav-help" onClick={openOrders}>My orders</button>
           <button className="store-nav-help" onClick={openHelp}>Get help</button>
         </nav>
-        <button className="store-cart" onClick={() => setCheckout(true)} aria-label={`Open cart, ${count} ${count === 1 ? 'item' : 'items'}`}><ShoppingBag size={18} /><span>Cart</span><span className="store-cart-count">{count}</span></button>
+        {shopper ? (
+          <details className="store-account">
+            <summary aria-label={`Account: ${shopper.name}`}><span className="store-avatar" aria-hidden="true">{shopper.name.charAt(0).toUpperCase()}</span><span className="store-account-name">{shopper.name.split(' ')[0]}</span></summary>
+            <div className="store-account-menu">
+              <strong>{shopper.name}</strong><span>{shopper.email}</span><span>{shopper.phone}</span>
+              <button type="button" onClick={(e) => { (e.currentTarget.closest('details') as HTMLDetailsElement).open = false; openOrders() }}><Package size={15} aria-hidden="true" />My orders</button>
+              <button type="button" onClick={logOut}><LogOut size={15} aria-hidden="true" />Log out</button>
+            </div>
+          </details>
+        ) : (
+          <button className="store-login" type="button" onClick={() => needLogin()}><User size={16} aria-hidden="true" />Log in</button>
+        )}
+        {shopper && <button className="store-cart" onClick={openCart} aria-label={`Open cart, ${count} ${count === 1 ? 'item' : 'items'}`}><ShoppingBag size={18} /><span>Cart</span><span className="store-cart-count">{count}</span></button>}
       </header>
 
       <main id="store-top">
@@ -275,6 +350,24 @@ export default function StoreDemo() {
             </button>
             <p className="store-demo-note">Payments by Cashfree (sandbox). No real money is taken, and returning from the payment page confirms the order.</p>
           </>}
+        </div>
+      </dialog>
+      <dialog ref={authDialog} className="store-checkout store-auth" onCancel={() => setAuthOpen(false)} onClose={() => setAuthOpen(false)} onClick={(e) => { if (e.target === e.currentTarget) setAuthOpen(false) }} aria-labelledby="auth-title">
+        <div className="store-checkout-inner" data-ui>
+          <div className="store-checkout-heading"><h2 id="auth-title">{authMode === 'signup' ? 'Create your account' : 'Welcome back'}</h2><button onClick={() => setAuthOpen(false)} aria-label="Close"><X size={22} /></button></div>
+          <p className="store-demo-note">{authMode === 'signup' ? 'Sign up to add things to your cart and check out. We’ll remember you on this device.' : 'Log in to add things to your cart and check out.'}</p>
+          <div className="store-auth-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={authMode === 'signup'} className={authMode === 'signup' ? 'is-on' : ''} onClick={() => { setAuthMode('signup'); setAuthError('') }}>Create account</button>
+            <button type="button" role="tab" aria-selected={authMode === 'login'} className={authMode === 'login' ? 'is-on' : ''} onClick={() => { setAuthMode('login'); setAuthError('') }}>Log in</button>
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); submitAuth() }} noValidate>
+            {authMode === 'signup' && <label>Your name<input autoComplete="name" placeholder="Name" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })} required /></label>}
+            <label>Email<input type="email" autoComplete="email" placeholder="you@example.com" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} required /></label>
+            <label>Password<input type="password" autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} placeholder={authMode === 'signup' ? 'At least 8 characters' : 'Your password'} value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} required /></label>
+            {authMode === 'signup' && <label>Mobile number<input type="tel" autoComplete="tel" inputMode="numeric" placeholder="10-digit mobile number" value={authForm.phone} onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })} required /></label>}
+            {authError && <p className="store-pay-error" role="alert">{authError}</p>}
+            <button className="store-button store-checkout-continue" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'signup' ? 'Create account' : 'Log in'}<ArrowRight size={18} /></button>
+          </form>
         </div>
       </dialog>
       <dialog ref={placedDialog} className="store-checkout store-placed" onClose={() => setPlaced(null)} aria-labelledby="placed-title">
