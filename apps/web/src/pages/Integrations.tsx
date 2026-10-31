@@ -144,14 +144,15 @@ export function useStoreConnection({ hideDemo = false, onSaved }: { hideDemo?: b
   const providers = hideDemo ? PROVIDERS.filter((p) => p.id !== 'mock') : PROVIDERS
   const [tab, setTab] = useState<string>('')
   const [f, setF] = useState<Record<string, string>>({})
-  useEffect(() => { if (data) { setTab((t) => t || active); setF((x) => ({ ...current, ...x })) } }, [data])
+  const [method, setMethod] = useState<'token' | 'app'>('token')  // Shopify: Admin API token, or a Dev Dashboard app's Client ID + secret
+  useEffect(() => { if (data) { if (current.client_id && !current.access_token) setMethod('app'); setTab((t) => t || (hideDemo && active === 'mock' ? 'shopify' : active)); setF((x) => ({ ...current, ...x })) } }, [data])
   const save = useMutation({
     mutationFn: () => {
-      const keys = ({ mock: [], shopify: ['shop_domain', 'access_token'], woocommerce: ['site_url', 'consumer_key', 'consumer_secret'], custom: ['endpoint_url'] } as any)[tab] as string[]
+      const keys = ({ mock: [], shopify: ['shop_domain', ...(method === 'app' ? ['client_id', 'client_secret'] : ['access_token'])], woocommerce: ['site_url', 'consumer_key', 'consumer_secret'], custom: ['endpoint_url'] } as any)[tab] as string[]
       // blank or masked fields keep the saved value
       return api('/v1/integrations/commerce', { method: 'PUT', body: { provider: tab, ...Object.fromEntries(keys.filter((k) => f[k] && f[k] !== '••••').map((k) => [k, f[k]])) } })
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['integration-health'] }) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['integration-health'] }); onSaved?.() },
   })
   const input = (k: string, placeholder: string, secret = false) => (
     <input name={`store-${k}`} autoComplete={secret ? 'new-password' : 'off'} className={inputCls} type={secret ? 'password' : 'text'} placeholder={placeholder} value={f[k] === '••••' ? '' : f[k] || ''}
@@ -174,9 +175,48 @@ export function StoreConnect({ hideDemo = false, onSaved, form }: { hideDemo?: b
         {tab === 'mock' && <p className="text-slate-600">Explore Sahay without connecting a live store. Choose your store platform above when you’re ready.</p>}
         {tab === 'shopify' && (
           <>
-            <ol className="connection-steps"><li>Have your store domain and Shopify Admin API token ready. The token needs access to orders and products.</li><li>Enter both below, then save the connection.</li></ol>
-            <p className="setup-help">Need help finding these? Ask the person who manages your Shopify store.</p>
-            <div className="setup-fields"><Field label="Shopify store domain" hint="Use the address ending in .myshopify.com.">{input('shop_domain', 'yourstore.myshopify.com')}</Field><Field label="Admin API access token" hint={current.access_token ? 'A token is saved. Leave blank to keep it.' : undefined}>{input('access_token', current.access_token ? 'Saved token' : 'Paste your token', true)}</Field></div>
+            <Field label="Your store's website" hint="Use the address your customers visit, like beatband.in. Sahay finds your Shopify address by itself. A yourstore.myshopify.com address works too.">{input('shop_domain', 'yourstore.in')}</Field>
+            <Field label="How will you give Sahay access?">
+              <div className="flex flex-wrap gap-2">
+                {([['token', 'Admin API access token'], ['app', 'Client ID and secret (new Shopify apps)']] as const).map(([id, label]) => (
+                  <button key={id} type="button" onClick={() => setMethod(id)} aria-pressed={method === id}
+                    className={cx('rounded-lg border px-3 py-1.5 text-sm', method === id ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}>{label}</button>))}
+              </div>
+            </Field>
+            {method === 'token' ? (
+              <>
+                <details className="dashboard-disclosure"><summary>Where do I find the access token?</summary><div className="space-y-2">
+                  <ol className="connection-steps">
+                    <li>In your Shopify admin, open <b>Settings → Apps and sales channels → Develop apps</b> and open your app (or create one).</li>
+                    <li>Under <b>Configuration → Admin API integration</b>, tick the permissions listed below, then save and <b>Install app</b>.</li>
+                    <li>Open <b>API credentials</b> and click <b>Reveal token once</b>. Copy the token that starts with <code>shpat_</code>. Shopify shows it only once.</li>
+                  </ol>
+                  <p className="setup-help">Shopify stopped letting new stores create these apps in 2026. If you don’t see “Develop apps” or “Create an app”, choose “Client ID and secret” above instead.</p>
+                </div></details>
+                <Field label="Admin API access token" hint={current.access_token ? 'A token is saved. Leave blank to keep it.' : 'Starts with shpat_'}>{input('access_token', current.access_token ? 'Saved token, leave blank to keep' : 'shpat_…', true)}</Field>
+              </>
+            ) : (
+              <>
+                <details className="dashboard-disclosure"><summary>Where do I find the Client ID and secret?</summary><div className="space-y-2">
+                  <ol className="connection-steps">
+                    <li>Sign in at <a className="setup-text-link" href="https://dev.shopify.com/dashboard" target="_blank" rel="noreferrer">dev.shopify.com/dashboard</a> with the Shopify account that owns your store.</li>
+                    <li>Click <b>Create app</b>, then under <b>Versions</b> add the permissions listed below and <b>Release</b>.</li>
+                    <li>Click <b>Install app</b> and choose your store.</li>
+                    <li>Open <b>Settings</b> in the app and copy the <b>Client ID</b> and <b>Client secret</b>.</li>
+                  </ol>
+                  <p className="setup-help">The app and the store must be under the same Shopify account (organization). Sahay renews the access automatically every day.</p>
+                </div></details>
+                <div className="setup-fields">
+                  <Field label="Client ID">{input('client_id', 'Paste the Client ID')}</Field>
+                  <Field label="Client secret" hint={current.client_secret ? 'A secret is saved. Leave blank to keep it.' : undefined}>{input('client_secret', current.client_secret ? 'Saved secret, leave blank to keep' : 'Paste the Client secret', true)}</Field>
+                </div>
+              </>
+            )}
+            <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+              <div className="mb-1 font-medium text-slate-700">Permissions to give the app (read only)</div>
+              <div className="flex flex-wrap gap-1.5">{['read_orders', 'read_products', 'read_customers', 'read_inventory'].map((x) => <code key={x} className="rounded bg-white px-1.5 py-0.5">{x}</code>)}</div>
+              <p className="mt-1.5">Optional: <code>read_all_orders</code> lets Sahay find orders older than 60 days. Sahay only reads your store. It never changes orders in Shopify.</p>
+            </div>
           </>
         )}
         {tab === 'woocommerce' && (

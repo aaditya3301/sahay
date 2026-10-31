@@ -11,6 +11,7 @@ contract; the tenant's `integrations` row (kind='commerce') picks the adapter.
 
 import re
 import secrets
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -154,25 +155,138 @@ class MockCommerce:
         )
         return {"rescheduled_to": date}
 
+# ---------------------------------------------------------------------------
+# Shopify connection helpers: find the store's real Shopify address, get a token, verify access
+# ---------------------------------------------------------------------------
+SHOPIFY_VERSION = "2026-07"
+_shopify_tokens: dict[tuple[str, str], tuple[str, float]] = {}  # (shop, client_id) -> (token, expires_at)
+
+
+def clean_host(raw: str) -> str:
+    """"https://www.beatband.in/pages/faq?x=1" -> "www.beatband.in"."""
+    h = (raw or "").strip().lower()
+    h = re.sub(r"^[a-z][a-z\d+.-]*://", "", h)
+    return h.split("/")[0].split("?")[0].split("#")[0].split(":")[0].strip()
+
+
+async def resolve_shop_domain(raw: str) -> str:
+    """Admin API calls need the store's *.myshopify.com address, but merchants know their own domain (beatband.in).
+    Accept either, plus admin.shopify.com/store/<name> links, and read the real address off the live storefront."""
+    text = (raw or "").strip()
+    m = re.search(r"admin\.shopify\.com/store/([a-z0-9][a-z0-9-]*)", text, re.I)
+    if m:
+        return f"{m.group(1).lower()}.myshopify.com"
+    host = clean_host(text)
+    if not host or "." not in host:
+        raise ValueError("Enter your store's website address, like yourstore.in")
+    if host.endswith(".myshopify.com"):
+        return host
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (compatible; SahayBot/1.0)"}) as c:
+            r = await c.get(f"https://{host}/")
+    except Exception:
+        raise ValueError(f"We couldn't open {host}. Check the address, or enter your yourstore.myshopify.com address instead.")
+    for pat in (r'Shopify\.shop\s*=\s*"([^"]+)"', r'"myshopifyDomain"\s*:\s*"([^"]+)"', r"([a-z0-9][a-z0-9-]*\.myshopify\.com)"):
+        found = re.search(pat, r.text)
+        if found and found.group(1).endswith(".myshopify.com"):
+            return found.group(1).lower()
+    raise ValueError(f"{host} doesn't look like a Shopify store. If it is, enter your yourstore.myshopify.com address instead.")
+
+
+async def shopify_token(shop: str, config: dict) -> str:
+    """A static Admin API token (shpat_…), or a fresh 24-hour token from a Dev Dashboard app's Client ID + secret."""
+    if config.get("access_token"):
+        return config["access_token"]
+    cid, secret = config.get("client_id"), config.get("client_secret")
+    if not (cid and secret):
+        raise ValueError("Add your Admin API access token, or the Client ID and Client secret of your Shopify app.")
+    cached = _shopify_tokens.get((shop, cid))
+    if cached and cached[1] > time.time() + 300:
+        return cached[0]
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.post(f"https://{shop}/admin/oauth/access_token", data={"grant_type": "client_credentials", "client_id": cid, "client_secret": secret})
+    data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    if r.status_code != 200 or not data.get("access_token"):
+        err = str(data.get("error") or data.get("errors") or r.status_code)
+        if "application_cannot_be_found" in r.text:  # Shopify answers wrong ids with an HTML page
+            err = "invalid_client"
+        if "shop_not_permitted" in err:
+            raise ValueError("Shopify says this app and store aren't in the same organization. Create the app in the Dev Dashboard of the account that owns this store.")
+        if "invalid_client" in err or r.status_code in (401, 403):
+            raise ValueError("Shopify rejected the Client ID or Client secret. Copy them again from your app's Settings in the Dev Dashboard.")
+        raise ValueError(f"Shopify wouldn't give us access ({err[:80]}).")
+    _shopify_tokens[(shop, cid)] = (data["access_token"], time.time() + int(data.get("expires_in") or 86399))
+    return data["access_token"]
+
+
+SHOPIFY_NEEDED = ("read_orders", "read_products")
+SHOPIFY_RECOMMENDED = ("read_customers", "read_inventory")
+
+
+async def verify_shopify(shop: str, config: dict) -> dict:
+    """Ask the store who we are and what we may read. Raises ValueError with a plain-language reason."""
+    token = await shopify_token(shop, config)
+    q = "{ shop { name myshopifyDomain primaryDomain { url } currencyCode } currentAppInstallation { accessScopes { handle } } }"
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(f"https://{shop}/admin/api/{SHOPIFY_VERSION}/graphql.json", json={"query": q}, headers={"X-Shopify-Access-Token": token})
+    except Exception:
+        raise ValueError(f"We couldn't reach {shop}. Check the address.")
+    if r.status_code in (401, 403):
+        raise ValueError("Shopify rejected this access token. Copy the whole token again (it starts with shpat_) and make sure the app is installed on the store.")
+    if r.status_code == 404:
+        raise ValueError(f"There is no Shopify store called {shop}.")
+    if r.status_code >= 400:
+        raise ValueError(f"Shopify returned an error ({r.status_code}). Try again in a minute.")
+    body = r.json()
+    if body.get("errors") or not body.get("data", {}).get("shop"):
+        raise ValueError("Shopify didn't let us read the store. Check the app's permissions and that it's installed.")
+    d = body["data"]
+    scopes = {s["handle"] for s in (d.get("currentAppInstallation") or {}).get("accessScopes", [])}
+    have = lambda s: s in scopes or s.replace("read_", "write_") in scopes  # noqa: E731
+    missing = [s for s in SHOPIFY_NEEDED if not have(s)]
+    if missing:
+        raise ValueError(f"The app is missing permission to read: {', '.join(missing)}. Add them in the app's Admin API scopes, then install the app again.")
+    return {"shop_name": d["shop"]["name"], "shop_domain": d["shop"]["myshopifyDomain"], "primary_domain": (d["shop"].get("primaryDomain") or {}).get("url"),
+            "scopes": sorted(scopes), "warnings": [f"Missing {s}: {'customer names and contacts' if s == 'read_customers' else 'live stock levels'} may be blank." for s in SHOPIFY_RECOMMENDED if not have(s)]}
+
+
+async def prepare_commerce_config(cfg: dict) -> tuple[dict, dict | None]:
+    """Check a store connection before saving it. Returns (config to save, what we learned). Raises ValueError."""
+    provider = cfg.get("provider")
+    if provider == "shopify":
+        shop = await resolve_shop_domain(cfg.get("shop_domain", ""))
+        info = await verify_shopify(shop, cfg)
+        return {**cfg, "shop_domain": shop, "shop_name": info["shop_name"], "primary_domain": info["primary_domain"]}, info
+    if provider == "woocommerce" and cfg.get("site_url"):
+        host = clean_host(cfg["site_url"])
+        if "." not in host:
+            raise ValueError("Enter your store's website address, like yourstore.in")
+        return {**cfg, "site_url": f"https://{host}"}, None
+    return cfg, None
+
 
 class ShopifyCommerce(MockCommerce):
-    """Shopify Admin GraphQL. Reads map Shopify orders into our order view; mutations use
-    standard Admin API mutations. Requires a custom app token with orders/products scopes."""
+    """Shopify Admin GraphQL. Reads (orders, products, stock, abandoned checkouts) are live from the store and need the
+    read_orders, read_products (+ read_customers, read_inventory) scopes. Changing an order (cancel, refund, replacement,
+    address, coupon, tags) is NOT automated yet: those raise NotSupported so the agent hands the case to a person
+    instead of pretending, and nothing is written to a table Shopify doesn't know about."""
 
     name = "shopify"
 
     def __init__(self, db, config: dict):
         super().__init__(db)
         self.shop = config["shop_domain"]
-        self.token = config["access_token"]
-        self.version = config.get("api_version", "2026-07")
+        self.config = config
+        self.version = config.get("api_version", SHOPIFY_VERSION)
 
     async def _gql(self, query: str, variables: dict | None = None) -> dict:
+        token = await shopify_token(self.shop, self.config)
         async with httpx.AsyncClient(timeout=20) as c:
             r = await c.post(
                 f"https://{self.shop}/admin/api/{self.version}/graphql.json",
                 json={"query": query, "variables": variables or {}},
-                headers={"X-Shopify-Access-Token": self.token},
+                headers={"X-Shopify-Access-Token": token},
             )
             r.raise_for_status()
             data = r.json()
@@ -255,6 +369,27 @@ class ShopifyCommerce(MockCommerce):
         p = self._map_product(nodes[0]["product"])
         return {**p, "image_uri": None, "image_phash": None, "attributes": {}}
 
+
+    def _manual(self, what: str):
+        raise NotSupported(f"{what} isn't automated for Shopify yet. A team member needs to do it in Shopify.")
+
+    async def create_replacement(self, order_ref: str, skus: list[str], reason: str) -> dict:
+        self._manual("Creating a replacement order")
+
+    async def refund(self, order_ref: str, amount_inr: float, reason: str) -> dict:
+        self._manual("Refunding an order")
+
+    async def cancel(self, order_ref: str, reason: str) -> dict:
+        self._manual("Cancelling an order")
+
+    async def update_address(self, order_ref: str, address: dict) -> dict:
+        self._manual("Changing a shipping address")
+
+    async def create_discount(self, value_inr: float, customer_ref: str) -> dict:
+        self._manual("Creating a discount code")
+
+    async def tag_order(self, order_ref: str, tag: str) -> dict:
+        self._manual("Updating the order")
 
     async def abandoned_checkouts(self, limit: int = 25) -> list[dict]:
         q = ("query($n:Int!){ abandonedCheckouts(first:$n, sortKey:CREATED_AT, reverse:true){ nodes { id abandonedCheckoutUrl createdAt updatedAt "
@@ -494,7 +629,7 @@ async def get_commerce(db) -> MockCommerce:
 
     row = await db.one("SELECT config FROM integrations WHERE kind='commerce' AND status='active'")
     cfg: dict[str, Any] = unseal((row or {}).get("config") or {})
-    if cfg.get("provider") == "shopify" and cfg.get("access_token"):
+    if cfg.get("provider") == "shopify" and cfg.get("shop_domain") and (cfg.get("access_token") or cfg.get("client_secret")):
         return ShopifyCommerce(db, cfg)
     if cfg.get("provider") == "woocommerce" and cfg.get("consumer_key") and cfg.get("site_url"):
         return WooCommerce(db, cfg)

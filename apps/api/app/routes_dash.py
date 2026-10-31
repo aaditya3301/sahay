@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from app import insights, kb, policy as pol
+from app import commerce, insights, kb, policy as pol
 from app.approvals import decide
 from app.channels import owner_message_preview, send_to_customer
 from app.config import settings
@@ -623,6 +623,12 @@ async def put_integration(kind: str, body: dict, ctx: Ctx = CtxDep):
         merged = {**((cur or {}).get("config") or {}), **{k: v for k, v in body.items() if v not in ("••••", None, "")}}
         from app.core import seal, unseal
 
+        merged = unseal(seal(merged))
+        if kind == "commerce":  # connect only if it really works: find the real address, test the credentials
+            try:
+                merged, learned = await commerce.prepare_commerce_config(merged)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
         sealed = seal(merged)
         merged = unseal(sealed)
         await db.exec(
@@ -633,10 +639,9 @@ async def put_integration(kind: str, body: dict, ctx: Ctx = CtxDep):
         async with system_session() as sdb:
             await sdb.exec("INSERT INTO channel_routes (channel, external_key, tenant_id) VALUES ('whatsapp',:k,:t) "
                            "ON CONFLICT (channel, external_key) DO UPDATE SET tenant_id=:t", k=merged["phone_number_id"], t=ctx.tenant_id)
-    if kind == "email" and merged.get("inbound_address"):
-        async with system_session() as sdb:
-            await sdb.exec("INSERT INTO channel_routes (channel, external_key, tenant_id) VALUES ('email',:k,:t) "
-                           "ON CONFLICT (channel, external_key) DO UPDATE SET tenant_id=:t", k=merged["inbound_address"].lower(), t=ctx.tenant_id)
+    if kind == "commerce" and learned:
+        return {"ok": True, "connected": {"shop_name": learned["shop_name"], "shop_domain": learned["shop_domain"],
+                                         "primary_domain": learned["primary_domain"], "warnings": learned["warnings"]}}
     return {"ok": True}
 
 
