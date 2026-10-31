@@ -30,7 +30,6 @@ const Simulations = lazy(() => import('./pages/Simulations'))
 const SimRun = lazy(() => import('./pages/Simulations').then((m) => ({ default: m.SimRun })))
 const Simulator = lazy(() => import('./pages/Simulator'))
 const StoreDemo = lazy(() => import('./pages/StoreDemo'))
-const Studio = lazy(() => import('./pages/Studio'))
 const TicketPage = lazy(() => import('./pages/Ticket'))
 
 export default function App() {
@@ -70,7 +69,7 @@ function Protected() {
         <Route path="/leads/:id" element={<LeadDetail />} />
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/calls" element={<Calls />} />
-        <Route path="/studio" element={<Studio />} />
+        <Route path="/studio" element={<Navigate to="/integrations?tab=agent" replace />} />
         <Route path="/knowledge" element={<Knowledge />} />
         <Route path="/policies" element={<Policies />} />
         <Route path="/simulations" element={<Simulations />} />

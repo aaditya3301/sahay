@@ -226,7 +226,7 @@ function Automations() {
             <div><dt>Cart reminder</dt><dd>{data?.settings?.cart_reminders === false ? 'Off' : `After ${data?.settings?.cart_reminder_hours ?? 1}h`}</dd></div>
             <div><dt>Newsletter draft</dt><dd>{data?.settings?.newsletter === false ? 'Off' : 'On'}</dd></div>
           </dl>
-          <a href="/studio?tab=persona" className="setup-text-link">Edit in Agent Studio →</a>
+          <a href="/integrations?tab=agent" className="setup-text-link">Edit agent settings →</a>
         </Card>
         {data?.runs?.length > 0 && (
           <Card title="Recent runs">
