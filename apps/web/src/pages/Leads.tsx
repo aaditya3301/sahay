@@ -30,22 +30,24 @@ export default function Leads() {
   const running = (data?.searches || []).filter((s: any) => s.status === 'running')
   return (
     <>
-      <PageHeader title="Leads" subtitle="All your prospects in one pipeline."
-        actions={<>
-          <input className={inputCls + ' w-56'} placeholder="Search leads" value={q} onChange={(e) => setQ(e.target.value)} />
-          <Button variant="secondary" onClick={() => setModal('import')}><Upload className="h-4 w-4" />Import CSV</Button>
-          <Button variant="secondary" onClick={() => setModal('add')}><Plus className="h-4 w-4" />Add lead</Button>
-          <Button onClick={() => setModal('find')}><Search className="h-4 w-4" />Find leads</Button>
-        </>} />
+      <PageHeader title="Leads" subtitle="All your prospects in one pipeline." />
+      <div className="leads-toolbar">
+        <input className={inputCls} placeholder="Search leads" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="leads-actions">
+          <Button size="sm" variant="secondary" onClick={() => setModal('import')}><Upload className="h-3.5 w-3.5" />Import CSV</Button>
+          <Button size="sm" variant="secondary" onClick={() => setModal('add')}><Plus className="h-3.5 w-3.5" />Add lead</Button>
+          <Button size="sm" onClick={() => setModal('find')}><Search className="h-3.5 w-3.5" />Find leads</Button>
+        </div>
+      </div>
       {data?.drafts_pending > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <Mail className="h-4 w-4" />{data.drafts_pending} email draft{data.drafts_pending > 1 ? 's are' : ' is'} waiting for your approval. Nothing is sent until you approve.
-          <button className="ml-auto text-xs font-medium underline" onClick={() => setGroup('all')}>Leads with drafts are marked ✉</button>
+          <button className="ml-auto text-xs font-medium underline" onClick={() => setGroup('all')}>View leads with drafts</button>
         </div>
       )}
       {running.length > 0 && (
         <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-          🔎 Searching the web for “{running[0].query}”… leads appear here as they're found, verified and scored.
+          <Search className="mr-1 inline h-4 w-4" aria-hidden="true" />Searching the web for “{running[0].query}”… leads appear here as they're found, verified and scored.
         </div>
       )}
       <Tabs value={group} onChange={setGroup} tabs={GROUPS.map(([id, label]) => ({ id, label: <>{label} <span className="ml-0.5 text-xs text-slate-400">{data?.groups?.[id] ?? ''}</span></> }))} />
@@ -60,7 +62,7 @@ export default function Leads() {
                 <tr key={l.id} className="hover:bg-slate-50">
                   <td className="px-4 py-2.5">
                     <Link to={`/leads/${l.id}`} className="font-medium text-brand-700 hover:underline">{l.name || l.company || l.email || l.phone || 'Unnamed'}</Link>
-                    {l.drafts > 0 && <Badge tone="amber" className="ml-1">✉ draft</Badge>}
+                    {l.drafts > 0 && <Badge tone="amber" className="ml-1"><Mail className="h-3 w-3" />Draft</Badge>}
                     <div className="text-xs text-slate-500">{[l.name && l.company, l.city].filter(Boolean).join(' · ')}</div>
                   </td>
                   <td><ScorePill score={l.score} /></td>
@@ -147,7 +149,7 @@ function ImportModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
   )
 }
 
-const eventIcon = (k: string) => ({ created: '✨', scored: '📊', email_checked: '🔍', email_drafted: '📝', email_sent: '📧', email_failed: '⚠️', email_rejected: '🗑', stage: '➡️', chat: '💬', link_opened: '🔗', callback_booked: '📞', call: '📞', edited: '✏️' } as any)[k] || '•'
+const eventLabel = (k: string) => ({ created: 'New lead', scored: 'Scored', email_checked: 'Email check', email_drafted: 'Drafted', email_sent: 'Sent', email_failed: 'Failed', email_rejected: 'Rejected', stage: 'Stage', chat: 'Chat', link_opened: 'Link opened', callback_booked: 'Callback', call: 'Call', edited: 'Edited' } as any)[k] || humanize(k)
 
 export function LeadDetail() {
   const tref = useTicketRef()
@@ -180,7 +182,7 @@ export function LeadDetail() {
               {data.events.map((e: any) => (
                 <div key={e.id} className="flex gap-3 text-sm">
                   <div className="w-28 shrink-0 text-xs text-slate-400">{time(e.created_at)}</div>
-                  <div className="w-5 text-center">{eventIcon(e.kind)}</div>
+                  <div className="w-24 shrink-0 text-xs font-medium text-slate-500">{eventLabel(e.kind)}</div>
                   <div className="min-w-0 flex-1 text-slate-700">{e.summary}
                     {e.data?.reasons && <ul className="mt-0.5 list-disc pl-4 text-xs text-slate-500">{e.data.reasons.map((r: string, i: number) => <li key={i}>{r}</li>)}</ul>}
                   </div>

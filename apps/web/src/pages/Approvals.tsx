@@ -23,22 +23,22 @@ export default function Approvals() {
       <Card pad={false}>
         <div className="px-3 pt-1"><Tabs value={status} onChange={setStatus} tabs={[{ id: 'pending', label: 'Pending' }, { id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }]} /></div>
         {isLoading ? <Spinner /> : !data?.length ? <Empty icon={<CheckSquare className="h-10 w-10" />} title="Nothing waiting">Actions that need your approval will appear here.</Empty> : (
-          <div className="divide-y divide-slate-100">
+          <div className="approval-list">
             {data.map((a: any) => (
-              <div key={a.id} className="grid grid-cols-[1fr_auto] gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
+              <article key={a.id} className="approval-row">
+                <div className="approval-content">
+                  <div className="approval-meta">
                     <Badge tone={a.kind === 'action' ? 'amber' : a.kind === 'handoff' ? 'red' : 'blue'}>{a.kind === 'action' ? humanize(a.action_type) : a.kind === 'handoff' ? 'Handoff to human' : 'Reply draft'}</Badge>
                     {a.value_paise > 0 && <Badge>{inr(a.value_paise, true)}</Badge>}
                     <Link to={`/tickets/${a.ticket_id}`} className="text-xs font-medium text-brand-700 hover:underline">Ticket {tref(a.number)}</Link>
-                    <span className="text-xs text-slate-400">· {a.customer_name} · {ago(a.created_at)}</span>
+                    <span className="text-xs text-slate-500">{a.customer_name} · {ago(a.created_at)}</span>
                     {a.decided_via && <Badge tone="violet">via {a.decided_via}</Badge>}
                   </div>
-                  <div className="mt-1 text-sm text-slate-800">{a.summary}</div>
-                  {a.draft_text && <div className="mt-1 line-clamp-2 rounded-md bg-slate-50 p-2 text-xs text-slate-600">{a.draft_text}</div>}
-                  {a.suggestion && <div className="mt-1 text-xs text-slate-500">{a.suggestion}</div>}
+                  <div className="approval-summary">{a.summary}</div>
+                  {a.draft_text && <div className="approval-draft">{a.draft_text}</div>}
+                  {a.suggestion && <div className="approval-suggestion">{a.suggestion}</div>}
                 </div>
-                <div className="flex flex-col items-end gap-2">
+                <div className="approval-actions">
                   <FrustrationBar value={a.frustration_score} />
                   {status === 'pending' && (a.kind === 'action' ? (
                     <div className="flex gap-1.5">
@@ -52,7 +52,7 @@ export default function Approvals() {
                     </div>
                   ) : <Link to={`/tickets/${a.ticket_id}`}><Button size="sm">Open</Button></Link>)}
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}

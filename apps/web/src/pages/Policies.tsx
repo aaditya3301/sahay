@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FlaskConical, HelpCircle, Scale, Wand2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { Badge, Button, Card, cx, Field, inputCls, PageHeader, Spinner } from '../components/ui'
+import { AlertCircle, CheckCircle2, HelpCircle, Scale, Wand2, XCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Badge, Button, Card, cx, inputCls, PageHeader, Spinner } from '../components/ui'
 import { api } from '../lib/api'
 import { humanize, time } from '../lib/format'
 
@@ -20,21 +20,22 @@ export default function Policies() {
   return (
     <>
       <PageHeader title="Policies" subtitle="Your rules for what Sahay can do." />
-      <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+      <div className="policies-layout">
         <div className="space-y-4">
           <Card title={<span className="flex items-center gap-1.5"><Wand2 className="h-4 w-4 text-brand-600" />Your rules, in your words</span>}>
-            <textarea className={inputCls + ' leading-relaxed'} rows={12} value={text} onChange={(e) => setText(e.target.value)}
-              placeholder="e.g. Replace damaged items under ₹800 automatically within 7 days of delivery. Refunds always need my approval." />
-            <Button className="mt-3 w-full" onClick={() => compile.mutate()} loading={compile.isPending} disabled={!text.trim()}>Compile into rules</Button>
+            <p className="policy-helper">Tell Sahay what it can handle automatically and when it should ask you first.</p>
+            <textarea className={inputCls + ' leading-relaxed'} rows={8} value={text} onChange={(e) => setText(e.target.value)}
+              placeholder="For example: Replace damaged items under ₹800 if reported within 7 days. Ask me before issuing any refund." />
+            <Button size="sm" className="mt-3" onClick={() => compile.mutate()} loading={compile.isPending} disabled={!text.trim()}><Wand2 className="h-3.5 w-3.5" />Turn into rules</Button>
             {compile.isPending && <div className="mt-2 text-xs text-slate-500">Gemini is compiling your rules against the allowed facts and actions…</div>}
             {compile.error && <div className="mt-2 text-xs text-red-600">{(compile.error as Error).message}</div>}
           </Card>
           <Card title="Versions" pad={false}>
             <div className="divide-y divide-slate-100">
               {versions.map((v: any) => (
-                <button key={v.id} onClick={() => setSelected(v.id)} className={cx('flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-slate-50', current?.id === v.id && 'bg-brand-50')}>
-                  <span>v{v.version} · {v.cards.length} rules</span>
-                  <span className="flex items-center gap-2 text-xs text-slate-400">{time(v.created_at)}<Badge tone={v.status === 'active' ? 'green' : v.status === 'draft' ? 'amber' : 'slate'}>{v.status}</Badge></span>
+                <button key={v.id} onClick={() => setSelected(v.id)} className={cx('policy-version', current?.id === v.id && 'is-selected')}>
+                  <span><strong>Version {v.version}</strong><small>{v.cards.length} rules · {time(v.created_at)}</small></span>
+                  <Badge tone={v.status === 'active' ? 'green' : v.status === 'draft' ? 'amber' : 'slate'}>{v.status}</Badge>
                 </button>
               ))}
             </div>
@@ -42,20 +43,22 @@ export default function Policies() {
         </div>
         {current && (
           <div className="space-y-4">
-            <Card title={<span className="flex items-center gap-1.5"><Scale className="h-4 w-4 text-slate-400" />Version {current.version} — what will be enforced</span>}
-              action={current.status === 'draft' ? <Button size="sm" variant="success" onClick={() => activate.mutate(current.id)} loading={activate.isPending}>Confirm & activate</Button> : <Badge tone={current.status === 'active' ? 'green' : 'slate'}>{current.status}</Badge>}>
-              <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg bg-slate-50 p-2.5"><div className="text-slate-500">Max automatic value</div><div className="text-base font-semibold">₹{current.rules.limits.max_auto_value_inr}</div></div>
-                <div className="rounded-lg bg-slate-50 p-2.5"><div className="text-slate-500">If no rule matches</div><div className="text-base font-semibold">{humanize(current.rules.unmatched_decision)}</div></div>
+            <Card className="policy-enforcement" title={<span className="flex items-center gap-1.5"><Scale className="h-4 w-4 text-slate-400" />Rules Sahay will follow</span>}
+              action={<div className="flex items-center gap-2">{current.status === 'draft' && <Button size="sm" variant="success" onClick={() => activate.mutate(current.id)} loading={activate.isPending}>Activate rules</Button>}<Badge tone={current.status === 'active' ? 'green' : current.status === 'draft' ? 'amber' : 'slate'}>{current.status}</Badge></div>}>
+              <div className="policy-limits">
+                <div><span>Automatic actions up to</span><strong>₹{current.rules.limits.max_auto_value_inr}</strong></div>
+                <div><span>When no rule applies</span><strong>{humanize(current.rules.unmatched_decision)}</strong></div>
               </div>
-              <div className="space-y-2">
+              <div className="policy-rule-list">
                 {current.cards.map((c: any) => (
-                  <div key={c.id} className={cx('rounded-lg border p-3', c.decision === 'allow' ? 'border-emerald-200 bg-emerald-50/40' : c.decision === 'deny' ? 'border-red-200 bg-red-50/40' : 'border-amber-200 bg-amber-50/40')}>
-                    <div className="text-sm font-semibold text-slate-800">{c.headline}</div>
-                    <div className="mt-1 flex flex-wrap gap-1">{c.when.map((w: string) => <code key={w} className="rounded bg-white px-1.5 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">{w}</code>)}</div>
-                    <div className="mt-1.5 text-xs italic text-slate-500">“{c.source}”</div>
-                    {c.deny_hint && <div className="mt-1 text-xs text-slate-600">Offer instead: {c.deny_hint}</div>}
-                  </div>
+                  <article key={c.id} className={cx('policy-rule', `policy-rule--${c.decision}`)}>
+                    <span className="policy-rule-mark" aria-hidden="true">{c.decision === 'allow' ? <CheckCircle2 size={14} /> : c.decision === 'deny' ? <XCircle size={14} /> : <AlertCircle size={14} />}</span>
+                    <div className="policy-rule-content"><div className="policy-rule-heading"><strong>{c.headline}</strong><Badge tone={c.decision === 'allow' ? 'green' : c.decision === 'deny' ? 'red' : 'amber'}>{c.decision === 'allow' ? 'Automatic' : c.decision === 'deny' ? 'Not allowed' : 'Ask first'}</Badge></div>
+                      {c.source && <details className="policy-rule-source"><summary>From your instructions</summary><p>“{c.source}”</p></details>}
+                      {c.deny_hint && <p className="policy-rule-alternative"><strong>Offer instead:</strong> {c.deny_hint}</p>}
+                      {!!c.when?.length && <details className="policy-rule-technical"><summary>When this rule applies</summary><div>{c.when.map((w: string) => <code key={w}>{w}</code>)}</div></details>}
+                    </div>
+                  </article>
                 ))}
               </div>
               {current.questions?.length > 0 && (
@@ -64,63 +67,11 @@ export default function Policies() {
                   <ul className="list-disc pl-4">{current.questions.map((q: string) => <li key={q}>{q}</li>)}</ul>
                 </div>
               )}
-              <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-                <b>Always on (platform rules you can't turn off):</b> orders must belong to the customer · amounts can't exceed the order total · prompt-injection or sensitive tickets never act automatically · reused or catalog photos go to a human · per-customer automatic action limit.
-              </div>
+              <details className="policy-safety"><summary>Built-in safety checks</summary><p>Orders must belong to the customer, amounts cannot exceed the order total, sensitive requests need a person, reused or catalog photos go to a human, and automatic actions are limited per customer.</p></details>
             </Card>
-            <TestBench policyId={current.id} facts={data.facts} actions={data.actions} />
           </div>
         )}
       </div>
     </>
-  )
-}
-
-const PRESETS: Record<string, Record<string, any>> = {
-  'Damaged item, ₹649, photo OK': { 'ticket.intent': 'damaged_item', 'action.value_inr': 649, 'order.total_inr': 649, 'order.days_since_delivery': 1, 'evidence.photo_verified': true, 'customer.fraud_score': 0, 'order.belongs_to_customer': true, 'customer.verified_for_order': true },
-  'Injection: refund ₹50,000': { 'ticket.intent': 'refund_request', 'action.value_inr': 50000, 'order.total_inr': 649, 'ticket.injection_suspected': true, 'order.belongs_to_customer': true, 'customer.verified_for_order': true },
-  'Someone else\'s order': { 'ticket.intent': 'address_change', 'order.belongs_to_customer': false, 'order.is_shipped': false },
-  'Catalog photo (fraud)': { 'ticket.intent': 'damaged_item', 'action.value_inr': 649, 'order.total_inr': 649, 'order.days_since_delivery': 3, 'evidence.photo_verified': false, 'evidence.reused_image': true, 'customer.fraud_score': 0.6, 'order.belongs_to_customer': true, 'customer.verified_for_order': true },
-}
-
-function TestBench({ policyId, facts, actions }: { policyId: string; facts: Record<string, [string, string]>; actions: Record<string, string> }) {
-  const [action, setAction] = useState('create_replacement')
-  const [values, setValues] = useState<Record<string, any>>(PRESETS['Damaged item, ₹649, photo OK'])
-  const test = useMutation({ mutationFn: () => api(`/v1/policies/${policyId}/test`, { body: { action, facts: values } }) })
-  const key = useMemo(() => JSON.stringify([action, values, policyId]), [action, values, policyId])
-  useEffect(() => { const t = setTimeout(() => test.mutate(), 250); return () => clearTimeout(t) }, [key])
-  const r = test.data
-  return (
-    <Card title={<span className="flex items-center gap-1.5"><FlaskConical className="h-4 w-4 text-slate-400" />Test bench — try a scenario, see the decision instantly</span>}>
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {Object.keys(PRESETS).map((p) => <button key={p} onClick={() => { setValues(PRESETS[p]); setAction(p.startsWith('Injection') ? 'issue_refund' : p.startsWith('Someone') ? 'update_shipping_address' : 'create_replacement') }}
-          className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50">{p}</button>)}
-      </div>
-      <div className="grid gap-4 md:grid-cols-[1fr_260px]">
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Action"><select className={inputCls} value={action} onChange={(e) => setAction(e.target.value)}>{Object.keys(actions).map((a) => <option key={a} value={a}>{humanize(a)}</option>)}</select></Field>
-          {Object.entries(facts).map(([k, [type]]) => (
-            <Field key={k} label={k}>
-              {type === 'bool' ? (
-                <select className={inputCls} value={values[k] === undefined ? '' : String(values[k])} onChange={(e) => setValues({ ...values, [k]: e.target.value === '' ? undefined : e.target.value === 'true' })}>
-                  <option value="">—</option><option value="true">true</option><option value="false">false</option></select>
-              ) : (
-                <input className={inputCls} value={values[k] ?? ''} onChange={(e) => setValues({ ...values, [k]: e.target.value === '' ? undefined : type === 'number' ? Number(e.target.value) : e.target.value })} />
-              )}
-            </Field>
-          ))}
-        </div>
-        <div>
-          {r && (
-            <div className={cx('sticky top-4 rounded-xl p-4', r.decision === 'allow' ? 'bg-emerald-50 ring-1 ring-emerald-200' : r.decision === 'deny' ? 'bg-red-50 ring-1 ring-red-200' : 'bg-amber-50 ring-1 ring-amber-200')}>
-              <div className="text-xs uppercase tracking-wide text-slate-500">Decision</div>
-              <div className="text-xl font-semibold">{r.decision === 'allow' ? '✅ Allowed automatically' : r.decision === 'deny' ? '⛔ Denied' : '🟡 Needs approval'}</div>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">{r.reasons.map((x: string) => <li key={x}>{x}</li>)}</ul>
-              {r.matched_rules?.length > 0 && <div className="mt-2 text-[11px] text-slate-500">Matched: {r.matched_rules.join(', ')}</div>}
-            </div>
-          )}
-        </div>
-      </div>
-    </Card>
   )
 }

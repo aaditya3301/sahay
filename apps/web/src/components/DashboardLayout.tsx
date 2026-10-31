@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUpRight, BarChart3, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, FlaskConical, GraduationCap, Inbox, LogOut, Megaphone, Menu, Phone, Plug, Scale, Settings, Shield, Sparkles, Store, Target, Users, X } from 'lucide-react'
+import { ArrowUpRight, BarChart3, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, Code2, FlaskConical, GraduationCap, Inbox, LogOut, Megaphone, Menu, Phone, Plug, Scale, Settings, Shield, Sparkles, Store, Target, Users, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { api, auth } from '../lib/api'
@@ -104,6 +104,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     ] },
     { id: 'workspace', label: 'Workspace', icon: <Settings />, items: [
       { to: '/integrations', label: 'Integrations', icon: <Plug /> },
+      { to: '/developer', label: 'Developer docs', icon: <Code2 /> },
       { to: '/security', label: 'Security', icon: <Shield />, count: ov?.security_24h },
       { to: '/settings', label: 'Settings', icon: <Settings /> },
     ] },

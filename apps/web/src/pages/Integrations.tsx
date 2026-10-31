@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, ExternalLink, Eye, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Eye, MessageCircle, PackageCheck, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import ChannelConnections from '../components/ChannelConnections'
 import { Badge, Button, Card, cx, Empty, Field, inputCls, PageHeader, Spinner, Tabs } from '../components/ui'
 import { api } from '../lib/api'
@@ -21,26 +21,41 @@ function Code({ children }: { children: string }) {
 }
 
 export default function Integrations() {
-  const [view, setView] = useState('connect')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [view, setView] = useState(location.pathname === '/developer' ? 'developer' : 'connect')
+  const isDeveloperPage = location.pathname === '/developer'
+  const activeView = isDeveloperPage ? 'developer' : view
   const { data } = useQuery({ queryKey: ['settings'], queryFn: () => api('/v1/settings') })
+  const changeView = (next: string) => {
+    if (next === 'developer') navigate('/developer')
+    else {
+      setView(next)
+      if (isDeveloperPage) navigate('/integrations')
+    }
+  }
   return (
     <>
-      <PageHeader title="Integrations" subtitle="Start with your store, then choose how customers reach you." />
-      <Tabs value={view} onChange={setView} tabs={[{ id: 'connect', label: 'Set up connections' }, { id: 'health', label: 'Connection status' }, { id: 'developer', label: 'Developer tools' }]} />
-      <section hidden={view !== 'connect'} className="setup-tab-content" aria-label="Set up connections">
+      <PageHeader title={isDeveloperPage ? 'Developer docs' : 'Integrations'} subtitle={isDeveloperPage ? 'A clear setup guide for your website, widget, and developer.' : 'Start with your store, then choose how customers reach you.'} />
+      <Tabs value={activeView} onChange={changeView} tabs={[{ id: 'connect', label: 'Set up connections' }, { id: 'health', label: 'Connection status' }, { id: 'developer', label: 'Developer docs' }]} />
+      <section hidden={activeView !== 'connect'} className="setup-tab-content" aria-label="Set up connections">
         <div className="integrations-connect-layout">
           <Store />
           {data ? <ChannelConnections integrations={data.integrations} showOtherChannels platformEmail={data.platform_email} /> : <Spinner />}
         </div>
       </section>
-      <section hidden={view !== 'health'} className="setup-tab-content" aria-label="Connection status"><Health onConnect={() => setView('connect')} /></section>
-      <section hidden={view !== 'developer'} className="setup-tab-content" aria-label="Developer tools">
-        <p className="setup-intro">For custom websites and the person helping you connect them. Standard store setup is in Set up connections.</p>
-        <div className="setup-resource-links"><a href="/docs" target="_blank" rel="noreferrer"><ExternalLink size={15} />Developer guide</a><a href="/api-docs" target="_blank" rel="noreferrer">API reference →</a></div>
+      <section hidden={activeView !== 'health'} className="setup-tab-content" aria-label="Connection status"><Health onConnect={() => setView('connect')} /></section>
+      <section hidden={activeView !== 'developer'} className="setup-tab-content" aria-label="Developer tools">
+        <p className="setup-intro">Choose what you are connecting. You can share this page with your developer; regular store connections are under Integrations.</p>
+        <div className="developer-start-grid">
+          <Link className="developer-start-card" to="/studio?tab=widget"><span className="developer-start-icon"><MessageCircle size={16} /></span><span><strong>Website chat widget</strong><small>Add Sahay chat to your website. No server work needed.</small></span><span aria-hidden="true">→</span></Link>
+          <details className="developer-start-card developer-start-details"><summary><span className="developer-start-icon"><PackageCheck size={16} /></span><span><strong>Store updates</strong><small>Send order and product changes from your website.</small></span><span aria-hidden="true">⌄</span></summary><div className="developer-start-links"><a href="/docs#levels" target="_blank" rel="noreferrer">Read setup guide <ExternalLink size={14} /></a><a href="/api-docs" target="_blank" rel="noreferrer">API reference <ExternalLink size={14} /></a></div></details>
+          <details className="developer-start-card developer-start-details"><summary><span className="developer-start-icon"><Send size={16} /></span><span><strong>Send events to your systems</strong><small>Forward ticket and lead updates to a CRM or backend.</small></span><span aria-hidden="true">⌄</span></summary><div className="developer-start-links"><a href="/docs" target="_blank" rel="noreferrer">Webhook guide <ExternalLink size={14} /></a><a href="/api-docs" target="_blank" rel="noreferrer">API reference <ExternalLink size={14} /></a></div></details>
+        </div>
         <div className="setup-developer-sections">
-          <details className="connection-disclosure"><summary>Website and secret keys</summary><div><Keys /></div></details>
+          <details className="connection-disclosure"><summary>Keys for your developer</summary><div><Keys /></div></details>
           <details className="connection-disclosure"><summary>Order and product updates</summary><div><Events /></div></details>
-          <details className="connection-disclosure"><summary>Send updates to your other systems</summary><div><Webhooks /></div></details>
+          <details className="connection-disclosure"><summary>Webhooks to your systems</summary><div><Webhooks /></div></details>
         </div>
       </section>
     </>
@@ -160,10 +175,6 @@ function Keys() {
             {reveal.isError && <div className="text-xs text-red-600">{(reveal.error as Error).message}</div>}
           </div>
           <p className="text-xs text-slate-500">Rotate the secret key in Agent Studio → Website widget. Never put the secret key in browser code.</p>
-          <div className="flex gap-3 text-xs">
-            <a href="/docs" target="_blank" className="font-medium text-brand-700 underline">Developer docs →</a>
-            <a href="/api-docs" target="_blank" className="font-medium text-brand-700 underline">API reference →</a>
-          </div>
         </div>
       )}
     </Card>

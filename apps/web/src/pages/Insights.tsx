@@ -104,32 +104,28 @@ function Reports() {
   const gen = useMutation({ mutationFn: () => api('/v1/insights/reports', { method: 'POST' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['reports'] }) })
   const r = reports?.[0]
   return (
-    <Card title={<span className="flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-brand-600" />Weekly insights report</span>}
-      action={<Button size="sm" onClick={() => gen.mutate()} loading={gen.isPending}>Generate this week's report</Button>}>
-      {gen.isPending && <div className="mb-3 text-xs text-slate-500">Clustering complaints, finding root causes, writing the report…</div>}
-      {!r ? <div className="text-sm text-slate-400">No report yet. It runs every Monday — or generate one now.</div> : (
-        <div className="grid gap-5 lg:grid-cols-[1fr_420px]">
-          <div>
-            <div className="mb-2 text-xs text-slate-400">{r.period_start} → {r.period_end} · generated {time(r.created_at)}</div>
-            <div className="prose-sm text-sm text-slate-700"><ReactMarkdown>{r.narrative_md}</ReactMarkdown></div>
-            {r.recommendations?.length > 0 && (
-              <div className="mt-3 space-y-2">{r.recommendations.map((x: any, i: number) => (
-                <div key={i} className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 text-sm"><div className="font-medium">{x.title} <Badge className="ml-1">{humanize(x.kind)}</Badge></div><div className="text-xs text-slate-600">{x.detail}</div></div>))}</div>
-            )}
+    <Card className="weekly-report" title={<span className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-brand-600" />Weekly insights report</span>}
+      action={<Button size="sm" onClick={() => gen.mutate()} loading={gen.isPending}>Generate report</Button>}>
+      {gen.isPending && <div role="status" className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-sm text-slate-600">Finding complaint patterns and preparing your report…</div>}
+      {!r ? <div className="text-sm text-slate-500">No report yet. Reports run every Monday, or you can generate one now.</div> : (
+        <>
+          <div className="weekly-report-period">{r.period_start} – {r.period_end}<span>Generated {time(r.created_at)}</span></div>
+          <div className="weekly-report-layout">
+            <div className="weekly-report-main">
+              <section className="weekly-report-summary"><h3>What happened this week</h3><div className="weekly-report-narrative prose-sm"><ReactMarkdown>{r.narrative_md}</ReactMarkdown></div></section>
+              {r.recommendations?.length > 0 && <section className="weekly-report-recommendations"><h3>Suggested next steps</h3><ol>{r.recommendations.map((x: any, i: number) => (
+                <li key={i}><span className="weekly-report-step" aria-hidden="true">•</span><div><div className="weekly-report-recommendation-title">{x.title}<Badge className="ml-2">{humanize(x.kind)}</Badge></div><p>{x.detail}</p></div></li>))}</ol></section>}
+            </div>
+            <aside className="weekly-report-clusters"><h3>Recurring complaints <span>{r.clusters.length}</span></h3>
+              {r.clusters.map((c: any) => (
+                <details key={c.cluster_id} className="weekly-cluster">
+                  <summary><span><strong>{c.label}</strong><small>{c.wow_change_pct != null ? <>{c.wow_change_pct > 0 ? '↑' : '↓'} {Math.abs(c.wow_change_pct)}% vs last week</> : 'New this week'}</small></span><span className="weekly-cluster-count">{c.size}<small>tickets</small></span></summary>
+                  <div className="weekly-cluster-details"><div className="weekly-cluster-drivers">{c.drivers.map((d: any) => <Badge key={d.field} tone="orange">{humanize(d.field)}: {d.value} · {d.share_pct}%{d.lift ? ` · ${d.lift}× usual` : ''}</Badge>)}</div><p><strong>Likely cause</strong>{c.root_cause}</p></div>
+                </details>
+              ))}
+            </aside>
           </div>
-          <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recurring complaint clusters</div>
-            {r.clusters.map((c: any) => (
-              <div key={c.cluster_id} className="rounded-lg border border-slate-200 p-3">
-                <div className="flex items-center justify-between"><span className="text-sm font-semibold">{c.label}</span>
-                  <span className="text-sm tabular-nums">{c.size} <span className="text-xs text-slate-400">tickets</span></span></div>
-                <div className="mt-0.5 text-xs text-slate-500">{c.wow_change_pct != null ? <>{c.wow_change_pct > 0 ? '▲' : '▼'} {Math.abs(c.wow_change_pct)}% vs last week ({c.prev_week})</> : 'new this week'}</div>
-                <div className="mt-1.5 flex flex-wrap gap-1">{c.drivers.map((d: any) => <Badge key={d.field} tone="orange">{humanize(d.field)}: {d.value} · {d.share_pct}%{d.lift ? ` · ${d.lift}× usual` : ''}</Badge>)}</div>
-                <div className="mt-1.5 text-xs text-slate-600">Likely cause: {c.root_cause}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        </>
       )}
     </Card>
   )
