@@ -1,7 +1,7 @@
 export type ReplyMode = 'draft' | 'auto'
 export type Goal = 'support' | 'sales' | 'both'
 export type Tone = 'warm' | 'professional' | 'playful' | 'calm'
-export type OnboardingStep = 0 | 1 | 2 | 3
+export type OnboardingStep = 0 | 1 | 2
 
 export interface OnboardingDraft {
   workspace: string
@@ -41,7 +41,7 @@ export function newOnboardingDraft(): OnboardingDraft {
   return {
     workspace: '', website: '', platform: '', description: '', audience: '', goal: ['both'],
     languages: ['en', 'hi', 'hinglish'], channels: ['website'], agentName: 'Sahay', tone: 'warm',
-    instructions: '', replyMode: 'draft', name: '', email: '', password: '',
+    instructions: '', replyMode: 'auto', name: '', email: '', password: '',
   }
 }
 
@@ -69,11 +69,6 @@ export function validateOnboardingStep(draft: OnboardingDraft, step: OnboardingS
     if (!draft.goal.length || draft.goal.some((value) => !goalNames[value])) errors.goal = 'Choose at least one thing your agent should focus on.'
   }
   if (step === 2) {
-    if (!draft.agentName.trim()) errors.agentName = 'Give your agent a name.'
-    if (!toneInstructions[draft.tone]) errors.tone = 'Choose your agent’s tone.'
-    if (!['draft', 'auto'].includes(draft.replyMode)) errors.replyMode = 'Choose how replies should be handled.'
-  }
-  if (step === 3) {
     if (draft.name.trim().length < 2) errors.name = 'Enter your name.'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim())) errors.email = 'Enter a valid email address.'
     if (draft.password.length < 8) errors.password = 'Use at least 8 characters for your password.'

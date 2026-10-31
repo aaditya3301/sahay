@@ -1,20 +1,19 @@
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, ApiError, auth, type Tenant } from '../lib/api'
 import {
   agentGreeting, buildOnboardingPayloads, channelNames, goalNames, languageNames, newOnboardingDraft,
-  platformNames, toneNames, validateOnboardingStep,
-  type FieldErrors, type Goal, type OnboardingDraft, type OnboardingStep, type ReplyMode, type Tone,
+  platformNames, validateOnboardingStep,
+  type FieldErrors, type OnboardingDraft, type OnboardingStep,
 } from '../lib/onboarding'
 import './Auth.css'
 
 type AuthResponse = { token: string; tenants: Tenant[]; user: { name: string; email: string } }
-const stages = ['Business', 'Customers', 'Your agent', 'Account']
+const stages = ['Business', 'Customers', 'Account']
 const stageCopy = [
   { title: 'Your business', sub: 'What should Sahay know?' },
   { title: 'Your customers', sub: 'Where and how they reach you.' },
-  { title: 'Your teammate', sub: 'Give your agent a voice.' },
   { title: 'Your account', sub: 'One last hello.' },
 ]
 
@@ -167,8 +166,8 @@ export function Signup() {
     const nextErrors = account.current ? {} : validateOnboardingStep(draft, step)
     setErrors(nextErrors); setError('')
     if (Object.keys(nextErrors).length) { requestAnimationFrame(() => form.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()); return }
-    if (step < 3) { setStep((step + 1) as OnboardingStep); return }
-    for (const earlier of [0, 1, 2] as OnboardingStep[]) {
+    if (step < 2) { setStep((step + 1) as OnboardingStep); return }
+    for (const earlier of [0, 1] as OnboardingStep[]) {
       const earlierErrors = validateOnboardingStep(draft, earlier)
       if (Object.keys(earlierErrors).length) { setErrors(earlierErrors); setStep(earlier); return }
     }
@@ -183,12 +182,12 @@ export function Signup() {
       }
       await api('/v1/settings', { method: 'PATCH', body: payloads.settings })
       await api('/v1/studio', { method: 'PUT', body: payloads.studio })
-      navigate('/knowledge?onboarding=1')
-    } catch (reason) { setError(account.current ? 'Your account is ready, but we couldn’t save all your agent preferences. Retry setup, or finish in Agent Studio.' : readableError(reason)) }
+      navigate('/setup')
+    } catch (reason) { setError(account.current ? 'Your account is ready, but we couldn’t save all your agent preferences. Retry setup, or continue to the setup steps.' : readableError(reason)) }
     finally { submitting.current = false; setLoading(false) }
   }
 
-  return <AuthShell signup draft={draft} showPreview={step === 2}>
+  return <AuthShell signup>
     <nav className="sahay-auth-progress" aria-label="Workspace setup progress"><ol>{stages.map((label, index) => <li key={label} className={index === step ? 'is-current' : index < step ? 'is-complete' : ''} aria-current={index === step ? 'step' : undefined}>
       {index < step && !accountCreated ? <button type="button" onClick={() => goTo(index as OnboardingStep)} disabled={loading} aria-label={`Edit ${label.toLowerCase()}`}><span className="sahay-auth-step-dot"><Check size={11} aria-hidden="true" /></span>{label}</button> : <span><span className="sahay-auth-step-dot">{index < step && <Check size={11} aria-hidden="true" />}</span>{label}</span>}
     </li>)}</ol></nav>
@@ -210,30 +209,21 @@ export function Signup() {
           <ChoiceGroup name="setup-channels" label="Where will you use Sahay?" options={channelNames} values={draft.channels} onChange={(value) => toggle('channels', value)} multiple error={errors.channels} hint="Connect your channels after setup." />
         </>}
         {step === 2 && <>
-          <FormField id="setup-agentName" label="Your agent’s name" error={errors.agentName}><input {...inputProps('agentName')} value={draft.agentName} onChange={(e) => set('agentName', e.target.value)} required maxLength={40} /></FormField>
-          <ChoiceGroup name="setup-tone" label="How should your agent sound?" options={toneNames} values={[draft.tone]} onChange={(value) => set('tone', value as Tone)} error={errors.tone} />
-          <FormField id="setup-instructions" label="Any service guidelines?" optional hint="Set order and refund rules later in Policies."><textarea {...inputProps('instructions')} rows={2} value={draft.instructions} onChange={(e) => set('instructions', e.target.value)} aria-describedby="setup-instructions-hint" maxLength={1200} /></FormField>
-          <ChoiceGroup name="setup-replyMode" label="How should replies be handled?" options={{ draft: 'Draft for my review', auto: 'Reply automatically' }} values={[draft.replyMode]} onChange={(value) => set('replyMode', value as ReplyMode)} error={errors.replyMode} />
-          <p className="sahay-auth-approval-note"><ShieldCheck size={17} aria-hidden="true" /><span>Order actions need approval until you set your rules.</span></p>
-        </>}
-        {step === 3 && <>
           <FormField id="setup-name" label="Your name" error={errors.name}><input {...inputProps('name')} autoComplete="name" value={draft.name} onChange={(e) => set('name', e.target.value)} required maxLength={120} /></FormField>
           <FormField id="setup-email" label="Email address" error={errors.email}><input {...inputProps('email')} type="email" autoComplete="username" value={draft.email} onChange={(e) => set('email', e.target.value)} required maxLength={254} /></FormField>
           {!accountCreated && <FormField id="setup-password" label="Create a password" error={errors.password} hint="At least 8 characters."><PasswordInput id="setup-password" signup value={draft.password} onChange={(value) => set('password', value)} error={errors.password} /></FormField>}
           <div className="sahay-auth-review" aria-label="Your setup summary">
             <div><span>Your workspace</span><strong>{draft.workspace}</strong></div>
-            <div><span>Your teammate</span><strong>{draft.agentName} · {toneNames[draft.tone]}</strong></div>
             <div><span>Languages</span><strong>{draft.languages.map((value) => languageNames[value]).join(', ')}</strong></div>
-            <div><span>Replies</span><strong>{draft.replyMode === 'draft' ? 'Reviewed by you' : 'Sent automatically'}</strong></div>
           </div>
         </>}
       </fieldset>
       {error && <p className="sahay-auth-error" role="alert">{error}</p>}
       <div className="sahay-auth-form-actions">
         {step > 0 && !accountCreated && <button className="sahay-auth-back" type="button" disabled={loading} onClick={() => goTo((step - 1) as OnboardingStep)}><ArrowLeft size={16} aria-hidden="true" /> Back</button>}
-        <button className="sahay-auth-primary" type="submit" disabled={loading}>{loading ? <><Loader2 size={18} className="sahay-auth-spinner" aria-hidden="true" />{accountCreated ? 'Saving your agent…' : 'Creating your workspace…'}</> : <>{step < 3 ? 'Continue' : accountCreated ? 'Retry setup' : 'Create workspace'}<ArrowRight size={18} aria-hidden="true" /></>}</button>
+        <button className="sahay-auth-primary" type="submit" disabled={loading}>{loading ? <><Loader2 size={18} className="sahay-auth-spinner" aria-hidden="true" />{accountCreated ? 'Saving your agent…' : 'Creating your workspace…'}</> : <>{step < 2 ? 'Continue' : accountCreated ? 'Retry setup' : 'Create workspace'}<ArrowRight size={18} aria-hidden="true" /></>}</button>
       </div>
-      {accountCreated && error && <Link className="sahay-auth-finish-later" to="/studio">Finish in Agent Studio</Link>}
+      {accountCreated && error && <Link className="sahay-auth-finish-later" to="/setup">Continue to setup</Link>}
     </form>
     <p className="sahay-auth-switch">Have an account? <Link to="/login">Sign in</Link></p>
   </AuthShell>
