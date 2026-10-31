@@ -4,6 +4,8 @@ WORKDIR /web
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
 COPY apps/web/ ./
+# the dashboard embeds the developer guide (src/components/DeveloperGuide.tsx imports ../../../docs/index.html)
+COPY apps/docs/ /docs/
 RUN npm run build
 
 # --- api + worker (one service) -----------------------------------------
