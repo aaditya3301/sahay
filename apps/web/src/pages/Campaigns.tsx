@@ -23,7 +23,7 @@ function CampaignList() {
   const { data, isLoading } = useQuery({ queryKey: ['campaigns'], queryFn: () => api('/v1/campaigns'), refetchInterval: 4000 })
   const [open, setOpen] = useState(false)
   const [sel, setSel] = useState<string | null>(null)
-  const [f, setF] = useState({ name: '', goal: '', channel: 'whatsapp', segment: 'recent_buyers' })
+  const [f, setF] = useState({ name: '', goal: '', channel: 'telegram', segment: 'recent_buyers' })
   const newsletter = useMutation({
     mutationFn: () => api('/v1/automations/newsletter', { method: 'POST' }),
     onSuccess: (c) => { qc.invalidateQueries({ queryKey: ['campaigns'] }); if (c?.id) setSel(c.id) },
@@ -66,7 +66,7 @@ function CampaignList() {
           <Field label="Name"><input className={inputCls} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Diwali gifting" /></Field>
           <Field label="Goal" hint="The AI writes the message from this, using only products in stock and real prices."><textarea className={inputCls} rows={3} value={f.goal} onChange={(e) => setF({ ...f, goal: e.target.value })} placeholder="Remind recent buyers about our gift boxes for Diwali; free gift wrap this week." /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Channel"><select className={inputCls} value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })}><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></Field>
+            <Field label="Channel"><select className={inputCls} value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })}><option value="telegram">Telegram</option><option value="email">Email</option></select></Field>
             <Field label="Audience"><select className={inputCls} value={f.segment} onChange={(e) => setF({ ...f, segment: e.target.value })}>{(data?.segments || []).map((s: any) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></Field>
           </div>
           {create.isError && <div className="text-xs text-red-600">{(create.error as Error).message}</div>}
@@ -123,7 +123,7 @@ function CampaignDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <div className="flex items-center gap-2 border-t pt-3">
               <Button variant="success" onClick={() => approve.mutate()} loading={approve.isPending}>Approve & send{pv ? ` to ${pv.eligible}` : ''}</Button>
               <Button variant="ghost" onClick={() => reject.mutate()} loading={reject.isPending}>Reject</Button>
-              <span className="text-[11px] text-slate-400">Recorded as simulated until WhatsApp / email are connected.</span>
+              <span className="text-[11px] text-slate-400">Recorded as simulated until Telegram / email are connected.</span>
             </div>
           )}
           {['approved', 'sending'].includes(c.status) && <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">Sending…</div>}
@@ -178,7 +178,7 @@ function Automations() {
               ['Monthly newsletter', 'Draft an email for you to review.'],
             ].map(([t, d]) => <div key={t}><dt>{t}</dt><dd>{d}</dd></div>)}
           </dl>
-          <details className="dashboard-disclosure automation-explanation"><summary>Timing and customer safeguards</summary><div className="setup-help space-y-2"><p>When scheduling is configured, checks run at 9am, 1pm, 5pm and 9pm IST. The evening run also sends your daily summary.</p><p>Cart reminders are sent once and skipped if the customer ordered, opted out or is upset. Lead follow-ups and newsletters are drafted for approval. Newsletters include an unsubscribe link.</p><p>Cash-on-delivery confirmations use WhatsApp, plus a call if enabled. Callbacks run when due. Follow-ups stop after the last scheduled attempt.</p></div></details>
+          <details className="dashboard-disclosure automation-explanation"><summary>Timing and customer safeguards</summary><div className="setup-help space-y-2"><p>When scheduling is configured, checks run at 9am, 1pm, 5pm and 9pm IST. The evening run also sends your daily summary.</p><p>Cart reminders are sent once and skipped if the customer ordered, opted out or is upset. Lead follow-ups and newsletters are drafted for approval. Newsletters include an unsubscribe link.</p><p>Cash-on-delivery confirmations use Telegram, plus a call if enabled. Callbacks run when due. Follow-ups stop after the last scheduled attempt.</p></div></details>
           {run.data && <div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(run.data).map(([k, v]) => <Badge key={k} tone={(v as number) > 0 ? 'green' : 'slate'}>{humanize(k)}: {String(v)}</Badge>)}</div>}
           {run.isError && <div className="mt-2 text-xs text-red-600">{(run.error as Error).message}</div>}
         </Card>
@@ -198,11 +198,11 @@ function Automations() {
         </Card>
       </div>
       <div className="space-y-4">
-        <Card title="Daily WhatsApp summary">
+        <Card title="Daily summary">
           <div className="automation-summary">
             {summary.data?.text ? <WaBubble text={summary.data.text} /> : data?.last_summary ? <WaBubble text={data.last_summary.data?.text} when={data.last_summary.created_at} /> : <div className="text-center text-xs text-slate-500">No summary yet.</div>}
           </div>
-          <p className="setup-help">Sent to the owner’s WhatsApp number. Demo mode until WhatsApp is connected.</p>
+          <p className="setup-help">Sent to the owner’s phone number. Demo mode until a messaging channel is connected.</p>
           <Button size="sm" variant="secondary" className="mt-3" onClick={() => summary.mutate()} loading={summary.isPending}>Send today’s summary</Button>
         </Card>
         <Card title="Carts" action={<ShoppingCart className="h-4 w-4 text-slate-400" />}>

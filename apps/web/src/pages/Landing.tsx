@@ -1,4 +1,4 @@
-import { ArrowUpRight, Check, ChevronDown, Globe2, Mail, MessageCircle, Phone, ShieldCheck } from 'lucide-react'
+import { ArrowUpRight, Check, ChevronDown, Globe2, Mail, Phone, Send, ShieldCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './Landing.css'
@@ -36,7 +36,7 @@ const examples: Record<Scenario, { customer: Record<Language, string>; reply: Re
 const questions = [
   { q: 'How does Sahay learn my business?', a: 'Add your store’s FAQs, shipping information, and return policies, then connect your catalogue and orders. Set your agent’s tone and action rules in Agent Studio. Sahay uses that information to answer customers.' },
   { q: 'Will I still control refunds?', a: 'Yes. You decide which actions can happen automatically and which need approval. You can review a request, edit a reply, or take over a sensitive conversation.' },
-  { q: 'Where can customers reach it?', a: 'Through your website chat, WhatsApp, email, and connected voice provider. Each channel needs its own connection, while the customer’s history stays together in Sahay.' },
+  { q: 'Where can customers reach it?', a: 'Through your website chat, Telegram, email, and connected voice provider. Each channel needs its own connection, while the customer’s history stays together in Sahay.' },
   { q: 'Does it speak my customers’ language?', a: 'Sahay is designed for English, Hindi, and Hinglish. It uses the conversation’s language and your business’s tone, so a customer can ask the way they naturally would.' },
 ]
 
@@ -114,7 +114,7 @@ export default function Landing() {
           <div className="sahay-channels" data-dissolve>
             <p>One teammate, wherever<br className="sahay-desktop-break" /> your customers are.</p>
             <ul aria-label="Supported channels">
-              <li><MessageCircle aria-hidden="true" />WhatsApp</li>
+              <li><Send aria-hidden="true" />Telegram</li>
               <li><Mail aria-hidden="true" />Email</li>
               <li><Globe2 aria-hidden="true" />Website</li>
               <li><Phone aria-hidden="true" />Voice</li>

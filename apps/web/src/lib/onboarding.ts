@@ -27,7 +27,7 @@ export const platformNames: Record<string, string> = {
   shopify: 'Shopify', woocommerce: 'WooCommerce', custom: 'My own website', social: 'Social media / marketplace', starting: 'Still getting started',
 }
 export const languageNames: Record<string, string> = { en: 'English', hi: 'Hindi', hinglish: 'Hinglish' }
-export const channelNames: Record<string, string> = { website: 'Website chat', whatsapp: 'WhatsApp', email: 'Email', voice: 'Phone calls' }
+export const channelNames: Record<string, string> = { website: 'Website chat', telegram: 'Telegram', email: 'Email', voice: 'Phone calls' }
 export const goalNames: Record<Goal, string> = { support: 'Customer support', sales: 'Sales enquiries', both: 'Sales & support' }
 export const toneNames: Record<Tone, string> = { warm: 'Warm & friendly', professional: 'Professional', playful: 'Playful', calm: 'Calm & reassuring' }
 export const toneInstructions: Record<Tone, string> = {

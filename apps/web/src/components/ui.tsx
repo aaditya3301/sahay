@@ -81,8 +81,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
 }
 
 export function ChannelIcon({ channel, className = 'h-3.5 w-3.5' }: { channel?: string | null; className?: string }) {
-  if (channel === 'telegram') return <Send className={cx(className, 'text-sky-500')} />
-  if (channel === 'whatsapp') return <MessageCircle className={cx(className, 'text-emerald-600')} />
+  if (channel === 'telegram' || channel === 'whatsapp') return <Send className={cx(className, 'text-sky-500')} />  // whatsapp: older demo rows
   if (channel === 'email') return <Mail className={cx(className, 'text-sky-600')} />
   if (channel === 'webchat') return <Globe className={cx(className, 'text-brand-600')} />
   if (channel === 'sim') return <MessagesSquare className={cx(className, 'text-slate-500')} />
@@ -90,7 +89,7 @@ export function ChannelIcon({ channel, className = 'h-3.5 w-3.5' }: { channel?: 
   return <UserRound className={cx(className, 'text-slate-400')} />
 }
 
-export const channelName = (c?: string | null) => ({ telegram: 'Telegram', whatsapp: 'WhatsApp', email: 'Email', webchat: 'Web chat', sim: 'Simulation', voice: 'Phone call' } as any)[c || ''] || humanize(c)
+export const channelName = (c?: string | null) => ({ telegram: 'Telegram', whatsapp: 'Telegram', email: 'Email', webchat: 'Web chat', sim: 'Simulation', voice: 'Phone call' } as any)[c || ''] || humanize(c)
 
 // Status always ships with icon + label (never color alone)
 export function StatusBadge({ status }: { status: string }) {

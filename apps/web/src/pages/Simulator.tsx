@@ -18,7 +18,7 @@ const QUICK = [
 export default function Simulator() {
   const { data: contacts } = useQuery({ queryKey: ['sim-contacts'], queryFn: () => api('/v1/simulator/contacts') })
   const { data: products } = useQuery({ queryKey: ['store-products'], queryFn: () => api('/v1/store/products') })
-  const [channel, setChannel] = useState('whatsapp')
+  const [channel, setChannel] = useState('telegram')
   const [who, setWho] = useState({ name: '', phone: '', email: '' })
   useEffect(() => {
     if (contacts?.length && !who.phone) {
@@ -48,7 +48,7 @@ export default function Simulator() {
             <Field label="Email"><input className={inputCls} value={who.email} onChange={(e) => setWho({ ...who, email: e.target.value })} /></Field>
             <Field label="Channel">
               <div className="grid grid-cols-3 gap-1.5">
-                {['whatsapp', 'email', 'webchat'].map((c) => (
+                {['telegram', 'email', 'webchat'].map((c) => (
                   <button key={c} onClick={() => setChannel(c)} className={cx('flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-medium',
                     channel === c ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}>
                     <ChannelIcon channel={c} />{channelName(c)}
@@ -108,8 +108,8 @@ function CustomerPhone({ channel, who, products }: { channel: string; who: any; 
     mr.start(); setRec(mr)
   }
 
-  const header = { whatsapp: 'bg-[#075e54]', email: 'bg-sky-700', webchat: 'bg-violet-700' }[channel]
-  const bg = channel === 'whatsapp' ? 'bg-[#ece5dd]' : 'bg-slate-50'
+  const header = { telegram: 'bg-[#2481cc]', email: 'bg-sky-700', webchat: 'bg-violet-700' }[channel]
+  const bg = channel === 'telegram' ? 'bg-[#dbe5ec]' : 'bg-slate-50'
   const photoOptions = products.filter((p: any) => p.has_image)
   return (
     <div className="mx-auto w-full max-w-[420px]">
@@ -124,13 +124,13 @@ function CustomerPhone({ channel, who, products }: { channel: string; who: any; 
             const mine = m.direction === 'in'
             return (
               <div key={m.id} className={cx('flex', mine ? 'justify-end' : 'justify-start')}>
-                <div className={cx('max-w-[85%] rounded-lg px-2.5 py-1.5 text-[13px] shadow-sm', mine ? (channel === 'whatsapp' ? 'bg-[#dcf8c6]' : 'bg-brand-600 text-white') : 'bg-white')}>
+                <div className={cx('max-w-[85%] rounded-lg px-2.5 py-1.5 text-[13px] shadow-sm', mine ? (channel === 'telegram' ? 'bg-[#e3f7cf]' : 'bg-brand-600 text-white') : 'bg-white')}>
                   {!mine && <div className="mb-0.5 flex items-center gap-1 text-[10px] font-medium text-brand-700">{m.author_type === 'ai' ? <><Bot className="h-3 w-3" />Sahay</> : 'Team'}</div>}
                   {(m.attachments || []).map((a: any) => a.kind === 'image'
                     ? <img key={a.id} src={mediaUrl(a.id)} className="mb-1 max-h-44 rounded" />
                     : a.kind === 'audio' ? <audio key={a.id} controls src={mediaUrl(a.id)} className="mb-1 h-8 w-52" /> : null)}
                   {m.text && <div className="whitespace-pre-wrap">{m.text}</div>}
-                  <div className={cx('mt-0.5 flex items-center justify-end gap-1 text-[10px]', mine && channel !== 'whatsapp' ? 'text-white/70' : 'text-slate-400')}>{time(m.created_at)}{mine && <CheckCheck className="h-3 w-3 text-sky-500" />}</div>
+                  <div className={cx('mt-0.5 flex items-center justify-end gap-1 text-[10px]', mine && channel !== 'telegram' ? 'text-white/70' : 'text-slate-400')}>{time(m.created_at)}{mine && <CheckCheck className="h-3 w-3 text-sky-500" />}</div>
                 </div>
               </div>
             )
@@ -175,9 +175,9 @@ function OwnerPhone() {
   const press = useMutation({ mutationFn: (button_id: string) => api('/v1/simulator/owner/press', { body: { button_id } }), onSuccess: () => qc.invalidateQueries({ queryKey: ['sim-owner'] }) })
   const msgs = [...(data?.messages || [])].reverse()
   return (
-    <Card title={<span className="flex items-center gap-1.5"><ChannelIcon channel="whatsapp" />Owner's WhatsApp</span>} action={<Badge>{data?.owner_phone || 'no owner phone'}</Badge>} pad={false}>
-      <div className="h-[560px] space-y-2 overflow-y-auto bg-[#ece5dd] p-3 scroll-thin">
-        {!msgs.length && <div className="mt-16 px-4 text-center text-xs text-slate-500">When the AI needs approval (refunds, big replacements…), the owner gets a message here with buttons — same as real WhatsApp interactive messages.</div>}
+    <Card title={<span className="flex items-center gap-1.5"><ChannelIcon channel="telegram" />Owner's phone</span>} action={<Badge>{data?.owner_phone || 'no owner phone'}</Badge>} pad={false}>
+      <div className="h-[560px] space-y-2 overflow-y-auto bg-[#dbe5ec] p-3 scroll-thin">
+        {!msgs.length && <div className="mt-16 px-4 text-center text-xs text-slate-500">When the AI needs approval (refunds, big replacements…), the owner gets a message here with buttons — same as the real owner message.</div>}
         {msgs.map((m: any) => (
           <div key={m.approval_id} className="max-w-[92%] rounded-lg bg-white p-2.5 text-[13px] shadow-sm">
             <div className="whitespace-pre-wrap">{m.text}</div>

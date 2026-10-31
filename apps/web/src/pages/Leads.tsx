@@ -11,7 +11,7 @@ export const STAGES = ['new', 'contacted', 'engaged', 'qualified', 'callback', '
 const GROUPS: [string, string][] = [['all', 'All'], ['new', 'New'], ['in_progress', 'In progress'], ['callback', 'Callback later'], ['customer', 'Customers'], ['dropped', 'Dropped'], ['needs_attention', 'Needs attention']]
 
 export const stageTone = (s?: string) => ({ new: 'blue', contacted: 'slate', engaged: 'violet', qualified: 'brand', callback: 'amber', customer: 'green', dropped: 'slate', needs_attention: 'red' } as any)[s || ''] || 'slate'
-const sourceLabel = (s?: string) => ({ webchat: 'Website chat', outbound: 'Lead search', import: 'CSV import', manual: 'Added by team', whatsapp: 'WhatsApp', email: 'Email', voice: 'Phone call' } as any)[s || ''] || humanize(s)
+const sourceLabel = (s?: string) => ({ webchat: 'Website chat', outbound: 'Lead search', import: 'CSV import', manual: 'Added by team', telegram: 'Telegram', whatsapp: 'Telegram', email: 'Email', voice: 'Phone call' } as any)[s || ''] || humanize(s)
 const emailTone = (s?: string) => ({ valid: 'green', risky: 'amber', invalid: 'red' } as any)[s || ''] || 'slate'
 
 export function ScorePill({ score }: { score?: number | null }) {
