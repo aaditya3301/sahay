@@ -1,6 +1,7 @@
 import { ArrowUpRight, Check, ChevronDown, Globe2, Mail, Phone, Send, ShieldCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { auth } from '../lib/api'
 import './Landing.css'
 
 type Language = 'English' | 'Hinglish'
@@ -74,6 +75,8 @@ export default function Landing() {
   const [language, setLanguage] = useState<Language>('Hinglish')
   const [scenario, setScenario] = useState<Scenario>('An order update')
   const example = examples[scenario]
+  const me = auth.get()?.token ? auth.get() : null  // still signed in: the landing page is just another page
+  const initials = (me?.user?.name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || 'S'
 
   useEffect(() => {
     const original = document.title
@@ -91,7 +94,9 @@ export default function Landing() {
           <a href="#see-it-work">See it work</a>
           <a href="#questions">Questions</a>
         </nav>
-        <Link className="sahay-sign-in" to="/login">Sign in</Link>
+        {me
+          ? <Link className="sahay-user" to="/inbox" aria-label={`Back to your dashboard, signed in as ${me.user?.name || 'you'}`}><span aria-hidden="true">{initials}</span>{me.user?.name || 'Dashboard'}</Link>
+          : <Link className="sahay-sign-in" to="/login">Sign in</Link>}
       </header>
 
       <main id="main-content" tabIndex={-1}>
@@ -100,7 +105,7 @@ export default function Landing() {
             <h1 id="hero-heading">Every hello,<br />handled.</h1>
             <p className="sahay-hero-description">AI sales and support for your store, from the first product question to the order that needs a little care.</p>
             <div className="sahay-hero-actions">
-              <Link className="sahay-button" to="/signup">Create workspace <ArrowUpRight size={19} aria-hidden="true" /></Link>
+              <Link className="sahay-button" to={me ? '/inbox' : '/signup'}>{me ? 'Back to your dashboard' : 'Create workspace'} <ArrowUpRight size={19} aria-hidden="true" /></Link>
               <a className="sahay-text-link" href="#see-it-work">See Sahay in action</a>
             </div>
             <p className="sahay-hero-note">Your voice. Your rules. A little more breathing room.</p>
@@ -186,7 +191,7 @@ export default function Landing() {
       <footer className="sahay-footer sahay-frame">
         <div className="sahay-footer-top">
           <h2 data-dissolve>Make room for<br />your business.</h2>
-          <div data-dissolve data-delay="80"><p>Let Sahay take the next conversation.</p><Link className="sahay-button sahay-button--ivory" to="/signup">Create workspace</Link></div>
+          <div data-dissolve data-delay="80"><p>Let Sahay take the next conversation.</p><Link className="sahay-button sahay-button--ivory" to={me ? '/inbox' : '/signup'}>{me ? 'Back to your dashboard' : 'Create workspace'}</Link></div>
         </div>
         <div className="sahay-footer-bottom"><a href="#" aria-label="Back to Sahay home"><SahayMark /></a><p>Good conversations. Growing businesses.</p><span>© {new Date().getFullYear()} Sahay</span></div>
       </footer>

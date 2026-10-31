@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, BarChart3, Check, CheckSquare, ChevronDown, ChevronRight, Code2, Inbox, LogOut, Megaphone, Menu, Phone, Plug, Settings, Store, Target, Users, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { api, auth } from '../lib/api'
 import { cx } from './ui'
 import './DashboardLayout.css'
@@ -194,7 +194,7 @@ function Sidebar({ primary, groups, pathname, expandedGroup, onExpand, name, ema
     {!!item.count && <span className="dashboard-nav-count">{item.count}</span>}
   </NavLink>
   return <>
-    <div className="dashboard-brand"><Wordmark />{closeButton}</div>
+    <div className="dashboard-brand"><Link to="/" className="dashboard-brand-link" aria-label="Sahay home" onClick={onNavigate}><Wordmark /></Link>{closeButton}</div>
     <nav className="dashboard-nav scroll-thin" aria-label="Workspace navigation">
       <div className="dashboard-nav-primary">{primary.map((item) => navItem(item))}</div>
       <div className="dashboard-nav-groups">{groups.map((group) => {

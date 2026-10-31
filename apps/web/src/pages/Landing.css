@@ -48,6 +48,9 @@ html:has(.sahay-landing) { scroll-behavior: smooth; scroll-padding-top: 28px; ba
 .sahay-header nav a, .sahay-sign-in { font-size: 16px; display: inline-flex; align-items: center; min-height: 44px; transition: opacity 200ms, transform 300ms var(--sahay-ease); }
 .sahay-header nav a:hover, .sahay-sign-in:hover { opacity: .7; transform: translateY(-2px); }
 .sahay-sign-in { font-weight: 600; }
+.sahay-user { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 16px 4px 4px; border-radius: 999px; background: var(--sahay-surface); font-weight: 600; font-size: 15px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: transform 300ms var(--sahay-ease), background 200ms; }
+.sahay-user:hover { transform: translateY(-2px); background: var(--sahay-soft-blue); }
+.sahay-user > span { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--sahay-blue); color: #fff; font-size: 13px; font-weight: 600; }
 .sahay-hero { padding-top: 44px; display: grid; grid-template-columns: 1.18fr 1fr; column-gap: 36px; row-gap: 64px; align-items: center; }
 .sahay-hero-copy { padding: 16px 0; }
 .sahay-hero h1 { font-size: clamp(70px, 8.1vw, 116px); font-weight: 600; line-height: .96; letter-spacing: -.065em; color: var(--sahay-blue); }
