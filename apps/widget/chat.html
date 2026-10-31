@@ -260,9 +260,16 @@
   function greeting() {
     var g = el('div', 'm out'); g.innerHTML = '<div class="who">' + esc(S.cfg.agent_name) + '</div>' + fmt(S.cfg.greeting); return g;
   }
+  function quickReplies() {
+    var row = el('div', 'quick');
+    (S.mode === 'reply_now' ? ['Bulk pricing', 'Book a call', 'What do you sell?'] : ['Where is my order?', 'Help me choose', 'Return or replace'])
+      .forEach(function (t) { var b = el('button', null, esc(t)); b.type = 'button'; b.onclick = function () { send(t); }; row.appendChild(b); });
+    return row;
+  }
   function render(msgs, typing) {
     var atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
     body.innerHTML = ''; body.appendChild(greeting());
+    if (!msgs.length && !typing) body.appendChild(quickReplies());
     var lastVerify = -1;
     msgs.forEach(function (m, i) { if (m.direction === 'out' && m.interactive && m.interactive.verify_phone) lastVerify = i; });
     msgs.forEach(function (m, i) {
@@ -286,11 +293,16 @@
   function cards(items) {
     var row = el('div', 'cards');
     items.forEach(function (p) {
-      var c = el('div', 'card', '<div class="t">' + esc(p.title) + '</div><div class="p">₹' + Number(p.price_inr).toLocaleString('en-IN') + '</div>' +
-        '<div class="s' + (p.in_stock ? '' : ' no') + '">' + (p.in_stock ? 'In stock' : 'Out of stock') + '</div>');
-      var b = el('button', null, 'Ask about this');
+      var initials = String(p.title || '?').split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+      var c = el('div', 'card', '<div class="ph">' + (p.image ? '<img src="' + esc(p.image) + '" alt="" loading="lazy">' : '<span class="mono">' + esc(initials) + '</span>') +
+        (p.in_stock ? '' : '<span class="tag">Sold out</span>') + '</div>' +
+        '<div class="bd"><div class="t">' + esc(p.title) + '</div><div class="row"><span class="p">₹' + Number(p.price_inr).toLocaleString('en-IN') + '</span>' +
+        '<span class="s' + (p.in_stock ? '' : ' no') + '">' + (p.in_stock ? 'In stock' : 'Out of stock') + '</span></div></div>');
+      var img = c.querySelector('img');
+      if (img) img.onerror = function () { img.replaceWith(el('span', 'mono', esc(initials))); };
+      var b = el('button', null, 'Tell me more'); b.type = 'button';
       b.onclick = function () { S.context.product_sku = p.sku; S.context.product_title = p.title; showCtx(); send('Tell me more about ' + p.title); };
-      c.appendChild(b); row.appendChild(c);
+      c.querySelector('.bd').appendChild(b); row.appendChild(c);
     });
     return row;
   }
@@ -337,6 +349,7 @@
     fd.append('session', S.session); fd.append('text', text);
     fd.append('context', JSON.stringify(Object.assign({ source: mode }, S.context)));
     if (S.pending) fd.append('file', S.pending);
+    var quick = body.querySelector('.quick'); if (quick) quick.remove();
     var bubble = el('div', 'm in', esc(text || '📷 photo')); body.appendChild(bubble);
     body.appendChild(el('div', 'typing', '<i></i><i></i><i></i>')); body.scrollTop = 1e9;
     S.pending = null; file.value = ''; input.placeholder = 'Type your message…';

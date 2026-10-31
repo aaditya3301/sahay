@@ -475,9 +475,13 @@ async def _call_tool(ctx: ToolContext, name: str, args: dict) -> dict:
     if name == "search_products":
         items = await shop.search_products(args.get("query", ""))
         ctx.ui.setdefault("products", [])
+        skus = [it["sku"] for it in items[:3]]
+        slug = await ctx.db.val("SELECT slug FROM tenants WHERE id=:t", t=ctx.db.tenant_id)
+        pictured = {r["sku"] for r in await ctx.db.all("SELECT sku FROM commerce_products WHERE sku = ANY(:s) AND image_uri IS NOT NULL", s=skus)}
         for it in items[:3]:
             if it["sku"] not in {p["sku"] for p in ctx.ui["products"]}:
-                ctx.ui["products"].append({k: it[k] for k in ("sku", "title", "price_inr", "in_stock")})
+                ctx.ui["products"].append({**{k: it[k] for k in ("sku", "title", "price_inr", "in_stock")},
+                                           "image": f"/public/products/{slug}/{it['sku']}.png" if it["sku"] in pictured else None})
         return {"products": items, "note": "Prices and stock are live right now."}
     if name == "get_product":
         p = await shop.get_product(args.get("sku", ""))
