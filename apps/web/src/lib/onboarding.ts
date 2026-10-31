@@ -9,7 +9,7 @@ export interface OnboardingDraft {
   platform: string
   description: string
   audience: string
-  goal: Goal
+  goal: Goal[]
   languages: string[]
   channels: string[]
   agentName: string
@@ -39,7 +39,7 @@ export const toneInstructions: Record<Tone, string> = {
 
 export function newOnboardingDraft(): OnboardingDraft {
   return {
-    workspace: '', website: '', platform: '', description: '', audience: '', goal: 'both',
+    workspace: '', website: '', platform: '', description: '', audience: '', goal: ['both'],
     languages: ['en', 'hi', 'hinglish'], channels: ['website'], agentName: 'Sahay', tone: 'warm',
     instructions: '', replyMode: 'draft', name: '', email: '', password: '',
   }
@@ -66,7 +66,7 @@ export function validateOnboardingStep(draft: OnboardingDraft, step: OnboardingS
   if (step === 1) {
     if (!draft.languages.length || draft.languages.some((value) => !languageNames[value])) errors.languages = 'Choose at least one language.'
     if (!draft.channels.length || draft.channels.some((value) => !channelNames[value])) errors.channels = 'Choose at least one channel.'
-    if (!goalNames[draft.goal]) errors.goal = 'Choose what your agent should focus on.'
+    if (!draft.goal.length || draft.goal.some((value) => !goalNames[value])) errors.goal = 'Choose at least one thing your agent should focus on.'
   }
   if (step === 2) {
     if (!draft.agentName.trim()) errors.agentName = 'Give your agent a name.'
@@ -87,7 +87,7 @@ export function buildOnboardingPayloads(draft: OnboardingDraft) {
     draft.description.trim(),
     `Store platform: ${platformNames[draft.platform]}.`,
     draft.audience.trim() ? `Customers: ${draft.audience.trim()}.` : '',
-    `Agent focus: ${goalNames[draft.goal]}.`,
+    `Agent focus: ${draft.goal.map((value) => goalNames[value]).join(', ')}.`,
     `Planned customer channels: ${draft.channels.map((channel) => channelNames[channel]).join(', ')}.`,
   ].filter(Boolean).join('\n')
   const voiceLanguage = draft.languages.includes('hinglish') ? 'hinglish' : draft.languages.includes('hi') ? 'hi' : 'en'
@@ -104,8 +104,7 @@ export function buildOnboardingPayloads(draft: OnboardingDraft) {
     studio: {
       agent_name: draft.agentName.trim(),
       persona: [toneInstructions[draft.tone], draft.instructions.trim()].filter(Boolean).join('\n'),
-      skills: { capture_lead: draft.goal !== 'support', book_call: draft.goal !== 'support' },
-      sales: { icp: draft.audience.trim(), capture_leads: draft.goal !== 'support' },
+      sales: { icp: draft.audience.trim() },
       voice: { language: voiceLanguage },
     },
   }

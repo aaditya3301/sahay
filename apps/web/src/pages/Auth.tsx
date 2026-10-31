@@ -152,7 +152,10 @@ export function Signup() {
     setDraft((previous) => ({ ...previous, [key]: value }))
     setErrors((previous) => ({ ...previous, [key]: undefined }))
   }
-  const toggle = (key: 'languages' | 'channels', value: string) => { set(key, draft[key].includes(value) ? draft[key].filter((item) => item !== value) : [...draft[key], value]) }
+  const toggle = (key: 'languages' | 'channels' | 'goal', value: string) => {
+    const current: string[] = draft[key]
+    set(key, (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]) as OnboardingDraft[typeof key])
+  }
   const goTo = (next: OnboardingStep) => { if (loading || accountCreated) return; setErrors({}); setError(''); setStep(next) }
   const describedBy = (key: keyof OnboardingDraft) => errors[key] ? `setup-${key}-error` : undefined
   const inputProps = (key: keyof OnboardingDraft) => ({ id: `setup-${key}`, name: key, 'aria-invalid': !!errors[key], 'aria-describedby': describedBy(key) })
@@ -202,7 +205,7 @@ export function Signup() {
         </>}
         {step === 1 && <>
           <FormField id="setup-audience" label="Who are your customers?" optional><input {...inputProps('audience')} placeholder="e.g. Gift shoppers or corporate teams" value={draft.audience} onChange={(e) => set('audience', e.target.value)} maxLength={300} /></FormField>
-          <ChoiceGroup name="setup-goal" label="What should Sahay help with?" options={goalNames} values={[draft.goal]} onChange={(value) => set('goal', value as Goal)} error={errors.goal} />
+          <ChoiceGroup name="setup-goal" label="What should Sahay help with?" options={goalNames} values={draft.goal} onChange={(value) => toggle('goal', value)} multiple hint="Pick one, or any combination." error={errors.goal} />
           <ChoiceGroup name="setup-languages" label="Languages your customers use" options={languageNames} values={draft.languages} onChange={(value) => toggle('languages', value)} multiple error={errors.languages} />
           <ChoiceGroup name="setup-channels" label="Where will you use Sahay?" options={channelNames} values={draft.channels} onChange={(value) => toggle('channels', value)} multiple error={errors.channels} hint="Connect your channels after setup." />
         </>}
